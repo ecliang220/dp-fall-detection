@@ -1,1 +1,3 @@
 data/
+results/
+model/train_model_*.py

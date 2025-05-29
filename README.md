@@ -5,16 +5,17 @@ This project implements a binary classifier to detect human falls using wearable
 ---
 
 ## 📁 Project Structure
-    fall-detection/
+    dp-fall-detection/
     ├── data/
-    │ ├── raw/ # Original SisFall .txt files
-    │ ├── preprocessed/ # CSV files with converted physical units
-    │ └── windows/ # Numpy arrays (X_windows.npy, y_labels.npy)
+    │ ├── raw/                          # Original SisFall .txt files
+    │ ├── preprocessed/                 # CSV files with converted physical units
+    │ └── windows/                      # Numpy arrays (X_windows.npy, y_labels.npy)
     ├── model/
-    │ └── train_model.py # CNN model training script
+    │ └── checkpoints/                  # Saved best model weights for evaluation
+    │ └── train_model.py                # CNN model training script
     ├── scripts/
-    │ ├── preprocess_data.py # Converts raw sensor data to physical units
-    │ └── prepare_training_input.py # Slices data into windows for model input
+    │ ├── preprocess_data.py            # Converts raw sensor data to physical units
+    │ └── prepare_training_input.py     # Slices data into windows for model input
     ├── requirements.txt
     └── README.md
 
