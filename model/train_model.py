@@ -31,8 +31,14 @@ Y_PATH = PROJECT_ROOT / "data/windows/y_labels.npy"
 # Directory for saving model checkpoint files (best performing CNN weights)
 MODEL_DIR_PATH = PROJECT_ROOT / "model" / "checkpoints"
 
+# File path for trained best model
+BEST_MODEL_FILE_PATH = MODEL_DIR_PATH / "best_model.pt"
+
 # Directory for saving model evaluation metrics and Optuna optimization results
 METRICS_DIR_PATH = PROJECT_ROOT / "results"
+
+# File path for trained and validated best model metrics
+BEST_MODEL_METRICS_FILE_PATH = METRICS_DIR_PATH / "best_model_metrics.csv"
 
 # Random seed for reproducibility across dataset splits, model initialization, and Optuna trials
 RANDOM_SEED = 42
@@ -426,7 +432,7 @@ def objective(trial):
         torch.save(model_state, MODEL_DIR_PATH  / f"model-t{trial.number}-lc{layer_count}-f1{f1:.3f}.pt")
 
         if f1 > objective.best_f1:
-            torch.save(model_state, MODEL_DIR_PATH / "best_model.pt")
+            torch.save(model_state, BEST_MODEL_FILE_PATH)
             objective.best_f1 = f1
 
     return f1  # Maximizing F1 score
@@ -475,7 +481,7 @@ def main():
         num_channels=best_params["num_channels"],
         dropout=best_params["dropout"]
     )
-    best_model.load_state_dict(torch.load(MODEL_DIR_PATH / "best_model.pt"))
+    best_model.load_state_dict(torch.load(BEST_MODEL_FILE_PATH))
 
     # Reload data with best batch size
     _, val_loader = load_data(X_PATH, Y_PATH, best_params["batch_size"])
@@ -490,7 +496,7 @@ def main():
     print(f"F1 Score: {f1:.4f}")
 
     # Output FINAL best model performance metrics to CSV file
-    with open(METRICS_DIR_PATH / "best_model_metrics.csv", "w", newline="") as csvFile:
+    with open(BEST_MODEL_METRICS_FILE_PATH, "w", newline="") as csvFile:
         csvWriter = csv.writer(csvFile)
         csvWriter.writerow(["accuracy", "precision", "recall", "f1"])
         csvWriter.writerow([acc, precision, recall, f1])
