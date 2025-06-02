@@ -68,6 +68,9 @@ OPTUNA_NUM_CHANNELS_VALS = [64, 128, 256]
 OPTUNA_LAYERS_MIN = 3
 OPTUNA_LAYERS_MAX = 6
 
+# Initial number of trials completed when Optuna study is loaded
+initial_completed = 0
+
 def flatten_and_normalize_data(X):
     """
     Normalizes sensor data across all windows using standard scaling.
@@ -368,6 +371,8 @@ def objective(trial):
     Returns:
         float: The F1 score on the validation set, used as the optimization objective.
     """
+    global initial_completed
+
     # Hyperparameters to explore
     lr = trial.suggest_float("lr", OPTUNA_LR_MIN, OPTUNA_LR_MAX, log=True)
     dropout = trial.suggest_float("dropout", OPTUNA_DROPOUT_MIN, OPTUNA_DROPOUT_MAX)
@@ -376,8 +381,7 @@ def objective(trial):
     layer_count = trial.suggest_int("layer_count", OPTUNA_LAYERS_MIN, OPTUNA_LAYERS_MAX)
 
     # Calculate how many trials are left in this training run
-    completed_trials = len([t for t in trial.study.trials if t.state.is_finished()])
-    trials_left = OPTUNA_N_TRIALS + completed_trials - trial.number - 1
+    trials_left = initial_completed + OPTUNA_N_TRIALS - trial.number
 
     # Log current trial hyperparameter details
     print('_____________________________________________________________')
@@ -435,6 +439,7 @@ def main():
     Returns:
         None
     """
+    global initial_completed
     # === Testing Hyperparameter Combinations to Optimize Model Performance  ===
     objective.best_f1 = 0.0 # Tracking best overall model
 
@@ -448,6 +453,9 @@ def main():
                         storage=OPTUNA_STORAGE_PATH,
                         load_if_exists=True # Resume progress if exists
                     )
+    
+    initial_completed = len([t for t in study.trials if t.state.is_finished()])
+
     study.optimize(objective, n_trials=OPTUNA_N_TRIALS)
 
     print("Number of finished trials:", len(study.trials))
