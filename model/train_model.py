@@ -57,7 +57,7 @@ OPTUNA_STORAGE_PATH = f"sqlite:///{str(Path(PROJECT_ROOT) / 'storage' / 'optuna_
 OPTUNA_RESULTS_FILE_PATH = METRICS_DIR_PATH / "optuna_results.csv"
 
 OPTUNA_STUDY_NAME = "CNN_fall_detection_optimization"
-OPTUNA_N_TRIALS = 30
+OPTUNA_N_TRIALS = 30 # more trials to run
 OPTUNA_LR_MIN = 1e-4
 OPTUNA_LR_MAX = 1e-2
 OPTUNA_DROPOUT_MIN = 0.3
@@ -456,7 +456,7 @@ def main():
 
     os.makedirs(METRICS_DIR_PATH, exist_ok=True)
     os.makedirs(OPTUNA_STORAGE_DIR_PATH, exist_ok=True)
-    if os.path.exists(OPTUNA_RESULTS_FILE_PATH): os.remove(OPTUNA_RESULTS_FILE_PATH)
+    # if os.path.exists(OPTUNA_RESULTS_FILE_PATH): os.remove(OPTUNA_RESULTS_FILE_PATH)
 
     study = optuna.create_study(
                         study_name=OPTUNA_STUDY_NAME,
