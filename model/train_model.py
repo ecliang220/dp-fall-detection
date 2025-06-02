@@ -398,7 +398,7 @@ def objective(trial):
     layer_count = trial.suggest_int("layer_count", OPTUNA_LAYERS_MIN, OPTUNA_LAYERS_MAX)
 
     # Log current trial hyperparameter details
-    print(f"\nTrial {trial}: Testing {layer_count}-layer CNN...")
+    print(f"\nTrial {trial.number}: Testing {layer_count}-layer CNN...")
     print(f"Learning Rate: {lr}")
     print(f"Batch Size: {batch_size}")
     print(f"Number of Channels: {num_channels}")
