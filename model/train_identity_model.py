@@ -454,7 +454,7 @@ def main():
                         load_if_exists=True # Resume progress if exists
                     )
     
-    initial_completed = len([t for t in study.trials if t.state.is_finished()])
+    initial_completed = len(study.trials)
 
     study.optimize(objective, n_trials=OPTUNA_N_TRIALS)
 

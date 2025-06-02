@@ -476,6 +476,7 @@ def main():
                         storage=OPTUNA_STORAGE_PATH,
                         load_if_exists=True # Resume progress if exists
                     )
+    initial_completed = len(study.trials)
     study.optimize(objective, n_trials=OPTUNA_N_TRIALS)
 
     print("Number of finished trials:", len(study.trials))
