@@ -40,6 +40,9 @@ METRICS_DIR_PATH = PROJECT_ROOT / "results"
 # File path for binary fall detection classifier performance metrics
 BEST_MODEL_METRICS_FILE_PATH = METRICS_DIR_PATH / "best_model_metrics.csv"
 
+# File path for binary fall detection classifier hyperparameters
+BEST_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_model_hyperparams.csv"
+
 # Random seed for reproducibility across dataset splits, model initialization, and Optuna trials
 RANDOM_SEED = 42
 
@@ -508,6 +511,17 @@ def main():
     print(f"Precision: {precision:.4f}")
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")
+
+    with open(BEST_MODEL_HYPERPARAMS_FILE_PATH, "w", newline="") as csvFile:
+        csvWriter = csv.writer(csvFile)
+        csvWriter.writerow(["layer_count", "learning_rate", "batch_size", "num_channels", "dropout"])
+        csvWriter.writerow(
+            [best_params["layer_count"], 
+             best_params["lr"], 
+             best_params["batch_size"], 
+             best_params["num_channels"], 
+             best_params["dropout"]]
+            )
 
     # Output FINAL best model performance metrics to CSV file
     with open(BEST_MODEL_METRICS_FILE_PATH, "w", newline="") as csvFile:
