@@ -397,12 +397,18 @@ def objective(trial):
     num_channels = trial.suggest_categorical("num_channels", OPTUNA_NUM_CHANNELS_VALS)
     layer_count = trial.suggest_int("layer_count", OPTUNA_LAYERS_MIN, OPTUNA_LAYERS_MAX)
 
+    # Calculate how many trials are left in this training run
+    completed_trials = len([t for t in trial.study.trials if t.state.is_finished()])
+    trials_left = OPTUNA_N_TRIALS + completed_trials - trial.number - 1
+
     # Log current trial hyperparameter details
+    print('_____________________________________________________________')
     print(f"\nTrial {trial.number}: Testing {layer_count}-layer CNN...")
     print(f"Learning Rate: {lr}")
     print(f"Batch Size: {batch_size}")
     print(f"Number of Channels: {num_channels}")
     print(f"Dropout: {dropout}")
+    print(f"{trials_left}/{OPTUNA_N_TRIALS} remaining...\n")
 
     # Load data and train
     train_loader, val_loader = load_data(X_PATH, Y_PATH, batch_size)
