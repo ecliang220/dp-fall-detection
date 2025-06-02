@@ -381,7 +381,7 @@ def objective(trial):
     layer_count = trial.suggest_int("layer_count", OPTUNA_LAYERS_MIN, OPTUNA_LAYERS_MAX)
 
     # Calculate how many trials are left in this training run
-    trials_left = initial_completed + OPTUNA_N_TRIALS - trial.number
+    trials_left = OPTUNA_N_TRIALS - (trial.number - initial_completed)
 
     # Log current trial hyperparameter details
     print('_____________________________________________________________')
