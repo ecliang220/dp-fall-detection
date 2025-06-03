@@ -7,17 +7,28 @@ This project implements a binary classifier to detect human falls using wearable
 ## 📁 Project Structure
     dp-fall-detection/
     ├── data/
-    │ ├── raw/                          # Original SisFall .txt files
-    │ ├── preprocessed/                 # CSV files with converted physical units
-    │ └── windows/                      # Numpy arrays (X_windows.npy, y_labels.npy)
+    │ ├── raw/                          # Original SisFall (.txt)
+    │ ├── preprocessed/                 # Raw sensor data converted physical units (.csv)
+    │ └── windows/                      # Final training input: Numpy arrays (X_windows.npy, y_labels.npy)
     ├── model/
-    │ └── checkpoints/                  # Saved best model weights for evaluation
-    │ └── train_model.py                # CNN model training script
+    │ ├── checkpoints/                  # Best-performing non-DP model weights (for baseline evaluation)
+    │ ├── dp_fall_detection/            # Saved DP model weights (one per ε level)
+    │ ├── identity_checkpoints/         # Trained identity classifier weights
+    │ ├── evaluate_model.py             # Loads best model from Optuna tuning and evaluates on validation set
+    │ ├── train_dp_model.py             # Main DP-SGD training pipeline (binary fall detection)
+    │ ├── train_identity_model.py       # Identity inference attack model with Optuna hyperparam tuning (multi-class classification)
+    │ └── train_model.py                # Non-DP CNN model training with Optuna hyperparam tuning (binary fall detection)
+    ├── results/
+    │ ├── dp/                           # Metrics from DP training and evaluation (.csv)
+    │ └── identity/                     # Metrics from identity classifier training and evaluation (.csv)
     ├── scripts/
-    │ ├── preprocess_data.py            # Converts raw sensor data to physical units
-    │ └── prepare_training_input.py     # Slices data into windows for model input
-    ├── requirements.txt
-    └── README.md
+    │ ├── preprocess_data.py            # Converts raw sensor data (.txt) to physical units (.csv)
+    │ └── prepare_training_input.py     # Slices data into windowed samples for model training input
+    ├── storage/                        # Stores Optuna study for persistent hyperparameter optimization (.db)
+    ├── .gitignore                      # Ignore checkpoints, data, results, and other generated files
+    ├── LICENSE                         # Project license
+    ├── requirements.txt                # Python dependencies (including Optuna, Opacus, Torch, etc.)
+    └── README.md                       # Project documentation and usage instructions
 
 ---
 

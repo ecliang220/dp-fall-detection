@@ -1,3 +1,16 @@
+"""
+train_dp_model.py
+
+Trains and evaluates CNN models for fall detection using IMU sensor data.
+Supports both standard training and differential privacy (DP-SGD) via Opacus.
+Outputs results to CSV and saves trained models for comparison.
+
+Intended for reproducible experiments and model evaluation in research contexts.
+
+
+Author: Ellie Liang
+Date: 2025-06-03
+"""
 import csv
 from datetime import datetime
 import os
@@ -16,6 +29,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 from pathlib import Path
 from opacus import PrivacyEngine
 from opacus.utils.uniform_sampler import UniformWithReplacementSampler
+from collections import OrderedDict
 
 """
 When True, Opacus will use a cryptographically secure random number generator (CSPRNG) for 
@@ -84,6 +98,10 @@ EARLY_STOPPING_PATIENCE = 5
 SIGMOID_BINARY_CLASSIFICATION_THRESHOLD = 0.5
 # Expanded alpha values for tighter RDP-based epsilon accounting
 # ALPHAS = [1 + x / 10.0 for x in range(1, 200)] + list(range(21, 128))
+# Output for invalid performance metrics
+INVALID_METRIC = "invalid"
+# Output for Not Applicable performance metrics
+NAN_METRIC = float("nan")
 
 """
 Terminal Output Color Adjustments
@@ -110,20 +128,29 @@ DEFAULT_DROPOUT = 0.3606
 # DEFAULT_NUM_CHANNELS = 256
 DEFAULT_NUM_CHANNELS = 64 # Decreased to fit cuda memory
 
-def color_str(str, color_code):
+def color_text(text, color_code):
     """
     Wraps a given string with ANSI escape codes to display colored text in the terminal.
 
     Args:
-        str (str): The text to be colored.
-        color (str): The ANSI escape code representing the desired text color.
+        text (str): The text to be colored.
+        color_code (str): The ANSI escape code representing the desired text color.
 
     Returns:
         str: The input text wrapped with the provided color code and a reset code to return to default styling.
     """
-    return f'{color_code}{str}{RESET}'
+    return f'{color_code}{text}{RESET}'
 
 def timestamp_now():
+    """
+    Returns the current date and time formatted as a timestamp ('[YYYY-MM-DD HH:MM:SS]').
+
+    Returns:
+        str: A string containing the formatted timestamp.
+    """
+    return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+
+def print_timestamp_now():
     """
     Returns the current date and time formatted as a timestamp ('[YYYY-MM-DD HH:MM:SS]'), 
     wrapped in green color for terminal output.
@@ -131,7 +158,29 @@ def timestamp_now():
     Returns:
         str: A string containing the formatted timestamp wrapped in color escape codes.
     """
-    return color_str(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", GREEN)
+    return color_text(timestamp_now(), GREEN)
+
+def remove_opacus_prefix(opacus_state_dict):
+    """
+    Converts an Opacus-wrapped state_dict to a standard PyTorch format.
+
+    - Removes the '_module.' prefix added by Opacus when wrapping models for DP-SGD.
+    - Ensures compatibility when loading saved DP models into standard nn.Module architectures.
+
+    Args:
+        opacus_state_dict (OrderedDict): A state dictionary potentially containing '_module.' prefixes in parameter keys.
+
+    Returns:
+        OrderedDict: A cleaned state dictionary with all '_module.' prefixes removed.
+    """
+    new_state_dict = OrderedDict()
+    for k, v in opacus_state_dict.items():
+        if k.startswith("_module."):
+            new_key = k[len("_module."):]
+        else:
+            new_key = k
+        new_state_dict[new_key] = v
+    return new_state_dict
 
 def flatten_and_normalize_data(X):
     """
@@ -403,7 +452,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         avg_train_loss = train_loss / len(train_loader)
         avg_val_loss = val_loss / len(val_loader)
 
-        epoch_logging = color_str(f"Epoch {epoch+1}: ", BLUE)
+        epoch_logging = print_timestamp_now() + color_text(f" Epoch {epoch+1}: ", BLUE)
 
         if use_dp and privacy_engine is not None:
             actual_epsilon = privacy_engine.get_epsilon(delta)
@@ -515,6 +564,12 @@ def main():
     Returns:
         None
     """
+    # Training start time for version control
+    training_start_time = timestamp_now()
+
+    os.makedirs(DP_MODEL_DIR_PATH, exist_ok=True)
+    os.makedirs(DP_METRICS_DIR_PATH, exist_ok=True)
+
     # Load hyperparameters with best performance on dataset
     hyperparams = dict()
     with open(BEST_MODEL_HYPERPARAMS_FILE_PATH, 'r') as csv_file:
@@ -537,16 +592,15 @@ def main():
 
     # === Train Baseline Model ===
     print(f"\n{'_' * 30}")
-    print(color_str("TRAINING baseline model...", RED))
+    print(color_text("TRAINING baseline model...", RED))
 
-    os.makedirs(DP_METRICS_DIR_PATH, exist_ok=True)
     if not os.path.exists(DP_TRAIN_RESULTS_FILE_PATH):
         with open(DP_TRAIN_RESULTS_FILE_PATH, 'w') as csv_file:
             csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(["target_ε", "actual_ε", "noise_multiplier", "val_loss", "accuracy", "precision", "recall", "f1"])
+            csv_writer.writerow(["target_ε", "actual_ε", "noise_multiplier", "val_loss", "accuracy", "precision", "recall", "f1", "datetime"])
     
     # Train once with Non-DP Fall Detection Classifier to achieve true upper bound of model performance 
-    print(color_str(f"\nTraining model without ε:", PURPLE))
+    print(color_text(f"\nTraining model without ε:", PURPLE))
     train_loader, val_loader = load_data(X_PATH, Y_PATH, hyperparams.get("batch_size", DEFAULT_BATCH_SIZE))
     model = make_cnn(
         layer_count=hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
@@ -563,34 +617,47 @@ def main():
     
     # Only save model and log results if training produced a valid model state and non-zero F1
     if model_state and f1 > 0 and not np.isnan(f1):
-        os.makedirs(DP_MODEL_DIR_PATH, exist_ok=True)
         torch.save(model_state, DP_MODEL_DIR_PATH / f"dp-model-baseline.pt")
 
         with open(DP_TRAIN_RESULTS_FILE_PATH, 'a') as csv_file:
             csv_writer = csv.writer(csv_file)
             csv_writer.writerow([
-                'None',
-                'None',
-                'None',
+                NAN_METRIC,
+                NAN_METRIC,
+                NAN_METRIC,
                 val_loss,
                 accuracy,
                 precision,
                 recall,
-                f1
+                f1,
+                training_start_time
             ])
     else:
-        print(f"Skipping logging/saving for baseline due to invalid metrics.")
+        print("Skipping logging for non-DP baseline due to invalid metrics.")
+        with open(DP_TRAIN_RESULTS_FILE_PATH, 'a') as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow([
+                NAN_METRIC,
+                NAN_METRIC,
+                NAN_METRIC,
+                INVALID_METRIC,
+                INVALID_METRIC,
+                INVALID_METRIC,
+                INVALID_METRIC,
+                INVALID_METRIC,
+                training_start_time
+            ])
 
     # === Evaluation of Baseline Model ===
     print(f"\n{'_' * 30}")
-    print(color_str("EVALUATING baseline model...", RED))
+    print(color_text("EVALUATING baseline model...", RED))
 
     if not os.path.exists(DP_EVAL_METRICS_FILE_PATH):
         with open(DP_EVAL_METRICS_FILE_PATH, "w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(["ε", "accuracy", "precision", "recall", "f1"])
+            csv_writer.writerow(["ε", "accuracy", "precision", "recall", "f1", "datetime"])
 
-    print(color_str(f"\nEvaluating model without ε:", PURPLE))
+    print(color_text(f"\nEvaluating model without ε:", PURPLE))
 
     reload_model_path = DP_MODEL_DIR_PATH / f"dp-model-baseline.pt"
     if reload_model_path.exists():
@@ -599,7 +666,8 @@ def main():
             num_channels=hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS),
             dropout=hyperparams.get("dropout", DEFAULT_DROPOUT)
         )
-        model.load_state_dict(torch.load(reload_model_path))
+        state_dict = torch.load(reload_model_path, weights_only=True) # weights_only=True to avoid security risk warning in PyTorch >= 2.2
+        model.load_state_dict(state_dict)
 
         # Reload data with best batch size
         _, val_loader = load_data(X_PATH, Y_PATH, hyperparams.get("batch_size", DEFAULT_BATCH_SIZE))
@@ -615,21 +683,21 @@ def main():
         # Output current epsilon performance metrics to CSV file
         with open(DP_EVAL_METRICS_FILE_PATH, "a", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(['None', accuracy, precision, recall, f1])
+            csv_writer.writerow([NAN_METRIC, accuracy, precision, recall, f1, training_start_time])
 
     # === Train Model at Various DP Levels ===
     print(f"\n{'_' * 30}")
-    print(color_str("TRAINING models with DP-SGD...", RED))
+    print(color_text("TRAINING models with DP-SGD...", RED))
 
     for epsilon in EPSILON_VALS:
-        print(color_str(f"\nTraining ε = {epsilon}:", PURPLE))
+        print(color_text(f"\nTraining ε = {epsilon}:", PURPLE))
         train_loader, val_loader = load_data(X_PATH, Y_PATH, hyperparams.get("batch_size", DEFAULT_BATCH_SIZE))
         model = make_cnn(
             layer_count=hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
             num_channels=hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS),
             dropout=hyperparams.get("dropout", DEFAULT_DROPOUT)
         )
-        val_loss, accuracy, precision, recall, f1, actual_epsilon, noise_multiplier, model_state = train_model(
+        val_loss, accuracy, precision, recall, f1, actual_epsilon, noise_multiplier, opacus_model_state = train_model(
                                                                         model, 
                                                                         train_loader, 
                                                                         val_loader, 
@@ -641,8 +709,8 @@ def main():
                                                                         )
         
         # Only save model and log results if training produced a valid model state and non-zero F1
-        if model_state and f1 > 0 and not np.isnan(f1):
-            os.makedirs(DP_MODEL_DIR_PATH, exist_ok=True)
+        if opacus_model_state and f1 > 0 and not np.isnan(f1):
+            model_state = remove_opacus_prefix(opacus_model_state)
             torch.save(model_state, DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}.pt")
 
             with open(DP_TRAIN_RESULTS_FILE_PATH, 'a') as csv_file:
@@ -655,17 +723,30 @@ def main():
                     accuracy,
                     precision,
                     recall,
-                    f1
+                    f1,
+                    training_start_time
                 ])
         else:
-            print(f"Skipping logging/saving for ε = {epsilon:.2f} due to invalid metrics.")
-
+            print(f"Skipping logging for ε = {epsilon:.2f} due to invalid metrics.")
+            with open(DP_TRAIN_RESULTS_FILE_PATH, 'a') as csv_file:
+                csv_writer = csv.writer(csv_file)
+                csv_writer.writerow([
+                    epsilon,
+                    INVALID_METRIC,
+                    INVALID_METRIC,
+                    INVALID_METRIC,
+                    INVALID_METRIC,
+                    INVALID_METRIC,
+                    INVALID_METRIC,
+                    INVALID_METRIC,
+                    training_start_time
+                ])
     # === Evaluation of DP-SGD Models ===
     print(f"\n{'_' * 30}")
-    print(color_str("EVALUATING DP-SGD models...", RED))
+    print(color_text("EVALUATING DP-SGD models...", RED))
     
     for epsilon in EPSILON_VALS:
-        print(color_str(f"\nEvaluating ε = {epsilon}:", PURPLE))
+        print(color_text(f"\nEvaluating ε = {epsilon}:", PURPLE))
 
         reload_model_path = DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}.pt"
         if not reload_model_path.exists():
@@ -677,7 +758,8 @@ def main():
             num_channels=hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS),
             dropout=hyperparams.get("dropout", DEFAULT_DROPOUT)
         )
-        model.load_state_dict(torch.load(reload_model_path))
+        state_dict = torch.load(reload_model_path, weights_only=True) # weights_only=True to avoid security risk warning in PyTorch >= 2.2
+        model.load_state_dict(state_dict)
 
         # Reload data with best batch size
         _, val_loader = load_data(X_PATH, Y_PATH, hyperparams.get("batch_size", DEFAULT_BATCH_SIZE))
@@ -693,7 +775,7 @@ def main():
         # Output current epsilon performance metrics to CSV file
         with open(DP_EVAL_METRICS_FILE_PATH, "a", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
-            csv_writer.writerow([epsilon, accuracy, precision, recall, f1])
+            csv_writer.writerow([epsilon, accuracy, precision, recall, f1, training_start_time])
 
 if __name__ == "__main__":
     set_seed(RANDOM_SEED)

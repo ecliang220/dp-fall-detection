@@ -35,8 +35,7 @@ MODEL_DIR_PATH = PROJECT_ROOT / "model" / "identity_checkpoints"
 BEST_MODEL_FILE_PATH = MODEL_DIR_PATH / "best_identity_model.pt"
 
 # Directory for saving model evaluation metrics and Optuna optimization results
-METRICS_DIR_PATH = PROJECT_ROOT / "identity_results"
-
+METRICS_DIR_PATH = PROJECT_ROOT / "results"/ "identity"
 # File path for identity classifier performance metrics
 BEST_MODEL_METRICS_FILE_PATH = METRICS_DIR_PATH / "best_identity_model_metrics.csv"
 
