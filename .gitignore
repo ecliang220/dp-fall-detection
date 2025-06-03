@@ -1,3 +1,6 @@
 data/
 results/
+storage/
+model/checkpoints/
 model/train_model_*.py
+venv/
