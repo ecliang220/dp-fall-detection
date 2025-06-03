@@ -87,7 +87,7 @@ EARLY_STOPPING_PATIENCE = 5
 SIGMOID_BINARY_CLASSIFICATION_THRESHOLD = 0.5
 
 # Expanded alpha values for tighter RDP-based epsilon accounting
-ALPHAS = [1 + x / 10.0 for x in range(1, 200)] + list(range(21, 128))
+# ALPHAS = [1 + x / 10.0 for x in range(1, 200)] + list(range(21, 128))
 
 """
 Default Hyperparameters (used when Optuna-derived parameters are unavailable)
@@ -373,7 +373,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         epoch_logging = f"Epoch {epoch+1}: "
 
         if use_dp and privacy_engine is not None:
-            actual_epsilon = privacy_engine.get_epsilon(delta, alphas=ALPHAS)
+            actual_epsilon = privacy_engine.get_epsilon(delta)
             epoch_logging += (
                 f"Target ε = {target_epsilon:.4f},"
                 f" Actual ε = {actual_epsilon:.4f},"
@@ -411,7 +411,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
             break # Early stopping...
     
     if use_dp:
-        return (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], privacy_engine.get_epsilon(delta, alphas=ALPHAS), noise_multiplier, best_model_state) if all_metrics else best_f1
+        return (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], privacy_engine.get_epsilon(delta), noise_multiplier, best_model_state) if all_metrics else best_f1
     else:
         return (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], best_model_state) if all_metrics else best_f1
 
