@@ -1,6 +1,8 @@
 data/
 results/
+identity_results/
 storage/
 model/checkpoints/
+model/identity_checkpoints/
 model/train_model_*.py
 venv/
