@@ -12,13 +12,22 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 from pathlib import Path
 from opacus import PrivacyEngine
 
+"""
+When True, Opacus will use a cryptographically secure random number generator (CSPRNG) for 
+adding Gaussian noise in DP-SGD to ensure noise is unpredictable and suitable for privacy 
+guarantees under adversarial threat models.
+
+TODO: Turn on for final training run and reporting official ε values in paper/documentation
+"""
+SECURE_MODE = False
+
 # Epsilon values to test (weakest to strongest)
 EPSILON_VALS = [8.0, 4.0, 2.0, 1.0, 0.5]
 
-# Delta value: Failure Probability
+# Delta value: Failure probability (acceptable risk of privacy leakage)
 DELTA_VAL = 1e-5
 
-# Gradient clipping: max_grad_norm
+# Gradient clipping: maximum L2 norm for per-sample gradients
 CLIPPING_NORM = 1.0
 
 # Detect if running in Google Colab
@@ -33,7 +42,7 @@ LOCAL_ROOT = Path(__file__).resolve().parents[1]
 # Dynamically resolve project root based on environment 
 PROJECT_ROOT = COLAB_ROOT if IS_COLAB else LOCAL_ROOT
 
-# Training model input files: sliding windows and labels as NumPy arrays in compressed binary format (.npy)
+# Training model input files: windowed IMU data and binary labels in .npy format
 X_PATH = PROJECT_ROOT / "data/windows/X_windows.npy"
 Y_PATH = PROJECT_ROOT / "data/windows/y_labels.npy"
 
@@ -49,29 +58,35 @@ METRICS_DIR_PATH = PROJECT_ROOT / "results"
 # Directory for DP model evaluation metrics
 DP_METRICS_DIR_PATH = METRICS_DIR_PATH / "dp"
 
-# File path for trained DP binary fall detection classifier results
+# File path for DP-SGD training results for each epsilon value
 DP_TRAIN_RESULTS_FILE_PATH = DP_METRICS_DIR_PATH / "dp_training_results.csv"
 
-# File path for evaluated DP binary fall detection classifier performance metrics
+# File path for DP-SGD evaluation metrics (reloaded model re-evaluation)
 DP_EVAL_METRICS_FILE_PATH = DP_METRICS_DIR_PATH / "dp_eval_metrics.csv"
 
-# File path for binary fall detection classifier performance metrics
+# File path for best non-DP model performance metrics
 BEST_MODEL_METRICS_FILE_PATH = METRICS_DIR_PATH / "best_model_metrics.csv"
 
-# File path for binary fall detection classifier hyperparameters
+# File path for best model hyperparameters from Optuna tuning
 BEST_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_model_hyperparams.csv"
 
-# Random seed for reproducibility across dataset splits, model initialization, and Optuna trials
+# Random seed for reproducibility across data splits, weight init, and tuning
 RANDOM_SEED = 42
 
-# Number of epochs to train the CNN model during each trial
+# Number of training epochs per model
 NUM_EPOCHS = 30
 
-# Threshold applied to sigmoid output to determine binary class (1 if output > threshold, else 0)
+# Number of epochs to wait without F1 improvement before stopping early
+EARLY_STOPPING_PATIENCE = 5
+
+# Threshold for classifying sigmoid output (0.0–1.0) as binary class
 SIGMOID_BINARY_CLASSIFICATION_THRESHOLD = 0.5
 
+# Expanded alpha values for tighter RDP-based epsilon accounting
+ALPHAS = [1 + x / 10.0 for x in range(1, 100)] + list(range(12, 64))
+
 """
-Default Hyperparams
+Default Hyperparameters (used when Optuna-derived parameters are unavailable)
 """
 DEFAULT_LAYER_COUNT = 5
 DEFAULT_LEARNING_RATE = 0.003167
@@ -167,21 +182,20 @@ def load_data(x_path, y_path, batch_size):
 
 def make_cnn(layer_count, num_channels, dropout):
     """
-    Base CNN model: Builds a 1D CNN model for fall detection using variable-depth architecture.
+    Constructs a 1D CNN for fall detection using privacy-compatible layers.
 
-    - The network begins with an initial Conv1D + BatchNorm + ReLU + MaxPool block.
-    - Additional convolutional blocks are added based on the specified layer_count.
-    - Each additional block doubles the number of channels and includes Conv1D + BatchNorm + ReLU.
-    - MaxPool1d is applied only in the first two additional blocks.
-    - The output is pooled, flattened, and passed through fully connected layers ending in a single sigmoid-logit output.
+    - Stacks convolutional blocks with GroupNorm, ReLU, and optional MaxPool1d.
+    - Doubles the number of channels after each convolutional block.
+    - Applies global average pooling, dropout, and a final linear layer.
+    - Output is a single logit (no activation), intended for BCEWithLogitsLoss.
 
     Args:
-        layer_count (int): Total number of convolutional blocks to include (minimum 3).
-        num_channels (int): Number of output channels for the first convolutional layer.
-        dropout (float): Dropout probability applied before the final output layer.
+        layer_count (int): Number of convolutional blocks (minimum 3).
+        num_channels (int): Number of filters in the first convolutional layer.
+        dropout (float): Dropout rate before the final output layer.
 
     Returns:
-        nn.Sequential: A PyTorch Sequential model ready for training.
+        nn.Sequential: The constructed CNN model.
     """
     layers = []
     input_channels = 9 # for 9 sensors
@@ -189,14 +203,14 @@ def make_cnn(layer_count, num_channels, dropout):
 
     # Add the first conv block
     layers.append(nn.Conv1d(input_channels, num_channels, kernel_size=5, padding=2))
-    layers.append(nn.BatchNorm1d(num_channels))
+    layers.append(nn.GroupNorm(1, current_channels))
     layers.append(nn.ReLU())
     layers.append(nn.MaxPool1d(2))
 
     for i in range(1, layer_count):
         next_channels = current_channels * 2
         layers.append(nn.Conv1d(current_channels, next_channels, kernel_size=3, padding=1))
-        layers.append(nn.BatchNorm1d(next_channels))
+        layers.append(nn.GroupNorm(1, next_channels))
         layers.append(nn.ReLU())
 
         if i < 3:
@@ -219,12 +233,13 @@ def make_cnn(layer_count, num_channels, dropout):
 def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCHS, all_metrics=True,
                 use_dp=False, target_epsilon=8.0, delta=1e-5, clipping_norm=1.0):
     """
-    Trains and evaluates the CNN model on fall detection data.
+    Trains the CNN model on fall detection data with optional differential privacy using Opacus.
 
     - Uses BCEWithLogitsLoss with class imbalance correction via pos_weight.
     - Applies Adam optimizer and learning rate scheduling based on validation F1 score.
-    - Performs early stopping if no F1 improvement is observed for `patience` epochs.
-    - Tracks training and validation performance, including accuracy, precision, recall, and F1.
+    - If `use_dp` is True, applies DP-SGD using Opacus with a specified target ε, δ, and clipping norm.
+    - Performs early stopping if no F1 improvement is observed for a fixed patience period.
+    - Tracks training and validation metrics: accuracy, precision, recall, F1, and loss.
 
     Args:
         model (nn.Module): The CNN model to train.
@@ -232,12 +247,20 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         val_loader (DataLoader): DataLoader for validation data.
         learning_rate (float): Learning rate for the Adam optimizer.
         epochs (int, optional): Maximum number of training epochs. Defaults to NUM_EPOCHS.
-        all_metrics (bool, optional): Whether to return all metrics and model state. If False, only F1 is returned.
+        all_metrics (bool, optional): If True, returns all performance metrics and model state.
+        use_dp (bool, optional): If True, trains with differential privacy using Opacus.
+        target_epsilon (float, optional): Target privacy budget ε for DP-SGD (required if use_dp is True).
+        delta (float, optional): Target failure probability δ for DP-SGD (required if use_dp is True).
+        clipping_norm (float, optional): Maximum gradient norm for DP-SGD clipping.
 
     Returns:
         tuple or float:
-            If all_metrics is True, returns (val_loss, acc, precision, recall, f1, best_model_state).
-            Otherwise, returns only the best F1 score achieved.
+            If use_dp and all_metrics are True:
+                Returns (val_loss, accuracy, precision, recall, f1, actual_epsilon, noise_multiplier, best_model_state).
+            If use_dp is False and all_metrics is True:
+                Returns (val_loss, accuracy, precision, recall, f1, best_model_state).
+            If all_metrics is False:
+                Returns best F1 score achieved.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Fall back to CPU when no GPU
     print("🚀 Device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU detected")
@@ -252,7 +275,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     if use_dp:
-        privacy_engine = PrivacyEngine()
+        privacy_engine = PrivacyEngine(secure_mode=SECURE_MODE)
         model, optimizer, train_loader = privacy_engine.make_private_with_epsilon(
             module=model,
             optimizer=optimizer,
@@ -269,7 +292,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
     
     # Tracking variables for early stopping
     best_f1 = 0
-    patience = 5
+    patience = EARLY_STOPPING_PATIENCE
     epochs_no_improve = 0
     metrics = {
         "val_loss": 0,
@@ -334,7 +357,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         epoch_logging = f"Epoch {epoch+1}: "
 
         if use_dp and privacy_engine is not None:
-            actual_epsilon = privacy_engine.get_epsilon(delta)
+            actual_epsilon = privacy_engine.get_epsilon(delta, alphas=ALPHAS)
             epoch_logging += (
                 f"Target ε = {target_epsilon:.4f},"
                 f" Actual ε = {actual_epsilon:.4f},"
@@ -372,23 +395,25 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
             break # Early stopping...
     
     if use_dp:
-        return (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], privacy_engine.get_epsilon(delta), privacy_engine.noise_multiplier, best_model_state) if all_metrics else best_f1
+        return (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], privacy_engine.get_epsilon(delta, alphas=ALPHAS), privacy_engine.noise_multiplier, best_model_state) if all_metrics else best_f1
     else:
         return (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], best_model_state) if all_metrics else best_f1
 
 def evaluate_model(model, val_loader):
     """
-    Evaluates a trained model on a validation or test dataset.
+    Evaluates a trained CNN model on a validation or test dataset.
 
-    - Applies sigmoid activation to model outputs and classifies predictions based on SIGMOID_BINARY_CLASSIFICATION_THRESHOLD.
-    - Computes standard binary classification metrics: accuracy, precision, recall, and F1 score.
+    - Applies sigmoid activation to model outputs and classifies predictions using a fixed binary threshold.
+    - Compares predictions against ground truth to compute accuracy, precision, recall, and F1 score.
+    - Assumes binary classification with labels in {0, 1} and outputs in [0, 1] after sigmoid.
 
     Args:
-        model (nn.Module): Trained CNN model.
-        val_loader (DataLoader): DataLoader for validation or test data.
+        model (nn.Module): Trained CNN model for binary classification.
+        val_loader (DataLoader): DataLoader containing the validation or test dataset.
 
     Returns:
-        tuple: (accuracy, precision, recall, f1)
+        tuple:
+            A tuple of (accuracy, precision, recall, f1), each as a float.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -425,13 +450,18 @@ def evaluate_model(model, val_loader):
 
 def main():
     """
-    Runs Optuna hyperparameter optimization and evaluates the best CNN model.
+    Trains and evaluates CNN-based fall detection models with differential privacy (DP-SGD)
+    across multiple privacy budgets (ε values) using fixed hyperparameters.
 
-    - Creates or resumes an Optuna study to tune CNN architecture and training parameters.
-    - Trains and evaluates models across multiple trials, logging results.
-    - Saves metrics and model checkpoints for each trial.
-    - Loads and evaluates the best-performing model on the validation dataset.
-    - Saves final best model performance metrics to a CSV file.
+    - Loads the best hyperparameters from a CSV file (tuned via Optuna separately).
+    - For each ε value in EPSILON_VALS:
+        - Loads and normalizes the dataset.
+        - Builds a CNN model using the fixed architecture.
+        - Trains the model with DP-SGD using Opacus.
+        - Logs training metrics and DP parameters (ε_spent, noise multiplier).
+        - Saves model weights to disk.
+    - After training, reloads each saved model and evaluates it on the validation set.
+    - Outputs evaluation metrics (accuracy, precision, recall, F1) to a CSV file.
 
     Returns:
         None
@@ -448,7 +478,7 @@ def main():
             "num_channels": int(hyperparams["num_channels"]),
             "dropout": float(hyperparams["dropout"]),
         }
-
+    print(f"Secure Mode: {'ON' if SECURE_MODE else 'OFF'}")
     # === Train Model at Various DP Levels ===
     print(f"\n{'_' * 30}")
     print(f"TRAINING models with DP-SGD...")
@@ -477,14 +507,26 @@ def main():
                                                                         delta=DELTA_VAL,
                                                                         clipping_norm=CLIPPING_NORM
                                                                         )
-
-        with open(DP_TRAIN_RESULTS_FILE_PATH, 'a') as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow([epsilon, actual_epsilon, noise_multiplier, val_loss, accuracy, precision, recall, f1])
         
-        if model_state:
+        # Only save model and log results if training produced a valid model state and non-zero F1
+        if model_state and f1 > 0 and not np.isnan(f1):
             os.makedirs(DP_MODEL_DIR_PATH, exist_ok=True)
             torch.save(model_state, DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}.pt")
+
+            with open(DP_TRAIN_RESULTS_FILE_PATH, 'a') as csv_file:
+                csv_writer = csv.writer(csv_file)
+                csv_writer.writerow([
+                    epsilon,
+                    actual_epsilon,
+                    noise_multiplier,
+                    val_loss,
+                    accuracy,
+                    precision,
+                    recall,
+                    f1
+                ])
+        else:
+            print(f"Skipping logging/saving for ε = {epsilon:.2f} due to invalid metrics.")
 
 
     # === Evaluation of DP-SGD Models ===
@@ -498,12 +540,18 @@ def main():
     
     for epsilon in EPSILON_VALS:
         print(f"Evaluating ε = {epsilon}:")
+
+        reload_model_path = DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}.pt"
+        if not reload_model_path.exists():
+            print(f"Model for ε = {epsilon:.2f} not found. Skipping evaluation...")
+            continue
+
         model = make_cnn(
             layer_count=hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
             num_channels=hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS),
             dropout=hyperparams.get("dropout", DEFAULT_DROPOUT)
         )
-        model.load_state_dict(torch.load(DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}.pt"))
+        model.load_state_dict(torch.load(reload_model_path))
 
         # Reload data with best batch size
         _, val_loader = load_data(X_PATH, Y_PATH, hyperparams.get("batch_size", DEFAULT_BATCH_SIZE))

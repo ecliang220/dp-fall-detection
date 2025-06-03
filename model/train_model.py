@@ -49,6 +49,9 @@ RANDOM_SEED = 42
 # Number of epochs to train the CNN model during each trial
 NUM_EPOCHS = 30
 
+# Number of epochs to wait without F1 improvement before stopping early
+EARLY_STOPPING_PATIENCE = 5
+
 # Threshold applied to sigmoid output to determine binary class (1 if output > threshold, else 0)
 SIGMOID_BINARY_CLASSIFICATION_THRESHOLD = 0.5
 
@@ -246,7 +249,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
     
     # Tracking variables for early stopping
     best_f1 = 0
-    patience = 5
+    patience = EARLY_STOPPING_PATIENCE
     epochs_no_improve = 0
     metrics = {
         "val_loss": 0,
