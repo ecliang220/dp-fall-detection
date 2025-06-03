@@ -1,5 +1,8 @@
 import csv
 import os
+# Tells PyTorch to allow more flexible GPU memory allocation (helps prevent CUDA out of memory errors)
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import numpy as np
 import random
 import sys
@@ -94,7 +97,8 @@ DEFAULT_LEARNING_RATE = 0.003167
 # DEFAULT_BATCH_SIZE = 128
 DEFAULT_BATCH_SIZE = 64 # Decreased to fit cuda memory
 DEFAULT_DROPOUT = 0.3606
-DEFAULT_NUM_CHANNELS = 256
+# DEFAULT_NUM_CHANNELS = 256
+DEFAULT_NUM_CHANNELS = 64
 
 def flatten_and_normalize_data(X):
     """
@@ -493,6 +497,8 @@ def main():
 
     # TODO: Batch size capped to DEFAULT_BATCH_SIZE to fit within Opacus/DP memory constraints. Remove if more memory available.
     hyperparams["batch_size"] = min(hyperparams["batch_size"], DEFAULT_BATCH_SIZE)
+    # TODO: Number of channels capped to DEFAULT_NUM_CHANNELS to fit within Opacus/DP memory constraints. Remove if more memory available.
+    hyperparams["num_channels"] = min(hyperparams["num_channels"], DEFAULT_NUM_CHANNELS)
 
     print(f"Secure Mode: {'ON' if SECURE_MODE else 'OFF'}")
     # === Train Model at Various DP Levels ===
