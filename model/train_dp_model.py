@@ -139,15 +139,6 @@ def color_text(text, color_code):
     """
     return f'{color_code}{text}{RESET}'
 
-def timestamp_now():
-    """
-    Returns the current date and time formatted as a timestamp ('[YYYY-MM-DD HH:MM:SS]').
-
-    Returns:
-        str: A string containing the formatted timestamp.
-    """
-    return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
-
 def print_timestamp_now():
     """
     Returns the current date and time formatted as a timestamp ('[YYYY-MM-DD HH:MM:SS]'), 
@@ -156,7 +147,7 @@ def print_timestamp_now():
     Returns:
         str: A string containing the formatted timestamp wrapped in color escape codes.
     """
-    return color_text(timestamp_now(), GREEN)
+    return color_text(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", GREEN)
 
 def remove_opacus_prefix(opacus_state_dict):
     """
@@ -563,7 +554,7 @@ def main():
         None
     """
     # Training start time for version control
-    training_start_time = timestamp_now()
+    training_start_time = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     os.makedirs(DP_MODEL_DIR_PATH, exist_ok=True)
     os.makedirs(DP_METRICS_DIR_PATH, exist_ok=True)
@@ -615,7 +606,7 @@ def main():
     
     # Only save model and log results if training produced a valid model state and non-zero F1
     if model_state and f1 > 0 and not np.isnan(f1):
-        torch.save(model_state, DP_MODEL_DIR_PATH / f"dp-model-baseline.pt")
+        torch.save(model_state, DP_MODEL_DIR_PATH / f"dp-model-baseline-{training_start_time}.pt")
 
         with open(DP_TRAIN_RESULTS_FILE_PATH, 'a') as csv_file:
             csv_writer = csv.writer(csv_file)
@@ -657,7 +648,7 @@ def main():
 
     print(color_text(f"\nEvaluating model without ε:", PURPLE))
 
-    reload_model_path = DP_MODEL_DIR_PATH / f"dp-model-baseline.pt"
+    reload_model_path = DP_MODEL_DIR_PATH / f"dp-model-baseline-{training_start_time}.pt"
     if reload_model_path.exists():
         model = make_cnn(
             layer_count=hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
@@ -709,7 +700,7 @@ def main():
         # Only save model and log results if training produced a valid model state and non-zero F1
         if opacus_model_state and f1 > 0 and not np.isnan(f1):
             model_state = remove_opacus_prefix(opacus_model_state)
-            torch.save(model_state, DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}.pt")
+            torch.save(model_state, DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}-{training_start_time}.pt")
 
             with open(DP_TRAIN_RESULTS_FILE_PATH, 'a') as csv_file:
                 csv_writer = csv.writer(csv_file)
@@ -746,7 +737,7 @@ def main():
     for epsilon in EPSILON_VALS:
         print(color_text(f"\nEvaluating ε = {epsilon}:", PURPLE))
 
-        reload_model_path = DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}.pt"
+        reload_model_path = DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}-{training_start_time}.pt"
         if not reload_model_path.exists():
             print(f"Model for ε = {epsilon:.2f} not found. Skipping evaluation...")
             continue
