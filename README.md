@@ -26,7 +26,10 @@ This project implements a binary classifier to detect human falls using wearable
 ```bash
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # or venv\\Scripts\\activate on Windows
+# macOS/Linux
+source venv/bin/activate
+# Windows
+.\venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
