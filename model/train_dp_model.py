@@ -10,11 +10,16 @@ from torch.utils.data import DataLoader, TensorDataset, random_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import precision_score, recall_score, f1_score
 from pathlib import Path
-import optuna
 from opacus import PrivacyEngine
 
-# Indicates whether model will be trained using differential privacy
-TEST_DP = True
+# Epsilon values to test (weakest to strongest)
+EPSILON_VALS = [8.0, 4.0, 2.0, 1.0, 0.5]
+
+# Delta value: Failure Probability
+DELTA_VAL = 1e-5
+
+# Gradient clipping: max_grad_norm
+CLIPPING_NORM = 1.0
 
 # Detect if running in Google Colab
 IS_COLAB = "google.colab" in sys.modules
@@ -35,11 +40,20 @@ Y_PATH = PROJECT_ROOT / "data/windows/y_labels.npy"
 # Directory for saving model checkpoint files (best performing CNN weights)
 MODEL_DIR_PATH = PROJECT_ROOT / "model" / "checkpoints"
 
-# File path for trained best model
-BEST_MODEL_FILE_PATH = MODEL_DIR_PATH / "best_model.pt"
+# Directory for saving DP model fall classifiers
+DP_MODEL_DIR_PATH = PROJECT_ROOT / "model" / "dp_fall_detection"
 
-# Directory for saving model evaluation metrics and Optuna optimization results
+# Directory for model evaluation metrics and Optuna optimization results
 METRICS_DIR_PATH = PROJECT_ROOT / "results"
+
+# Directory for DP model evaluation metrics
+DP_METRICS_DIR_PATH = METRICS_DIR_PATH / "dp"
+
+# File path for trained DP binary fall detection classifier results
+DP_TRAIN_RESULTS_FILE_PATH = DP_METRICS_DIR_PATH / "dp_training_results.csv"
+
+# File path for evaluated DP binary fall detection classifier performance metrics
+DP_EVAL_METRICS_FILE_PATH = DP_METRICS_DIR_PATH / "dp_eval_metrics.csv"
 
 # File path for binary fall detection classifier performance metrics
 BEST_MODEL_METRICS_FILE_PATH = METRICS_DIR_PATH / "best_model_metrics.csv"
@@ -57,25 +71,13 @@ NUM_EPOCHS = 30
 SIGMOID_BINARY_CLASSIFICATION_THRESHOLD = 0.5
 
 """
-Optuna Config
+Default Hyperparams
 """
-OPTUNA_STORAGE_DIR_PATH = PROJECT_ROOT / "storage"
-OPTUNA_STORAGE_PATH = f"sqlite:///{str(Path(PROJECT_ROOT) / 'storage' / 'optuna_fall_detection.db')}"
-OPTUNA_RESULTS_FILE_PATH = METRICS_DIR_PATH / "optuna_results.csv"
-
-OPTUNA_STUDY_NAME = "CNN_fall_detection_optimization"
-OPTUNA_N_TRIALS = 30 # more trials to run
-OPTUNA_LR_MIN = 1e-4
-OPTUNA_LR_MAX = 1e-2
-OPTUNA_DROPOUT_MIN = 0.3
-OPTUNA_DROPOUT_MAX = 0.6
-OPTUNA_BATCH_SIZE_VALS = [16, 32, 64, 128]
-OPTUNA_NUM_CHANNELS_VALS = [64, 128, 256]
-OPTUNA_LAYERS_MIN = 3
-OPTUNA_LAYERS_MAX = 5
-
-# Initial number of trials completed when Optuna study is loaded
-initial_completed = 0
+DEFAULT_LAYER_COUNT = 5
+DEFAULT_LEARNING_RATE = 0.003167
+DEFAULT_BATCH_SIZE = 128
+DEFAULT_DROPOUT = 0.3606
+DEFAULT_NUM_CHANNELS = 256
 
 def flatten_and_normalize_data(X):
     """
@@ -258,11 +260,11 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
             data_loader=train_loader,
             target_epsilon=target_epsilon,
             target_delta=delta,
-            epochs=epoch,
+            epochs=epochs,
             max_grad_norm=clipping_norm
         )
 
-        print(f"DP-SGD enabled: Target ε={target_epsilon}, δ={delta}, Clip={clipping_norm}")
+        print(f"DP-SGD enabled: Target ε={target_epsilon}, δ={delta}, Clip={clipping_norm}, Noise Multiplier={privacy_engine.noise_multiplier:.4f}")
     else: privacy_engine = None
     
     # Tracking variables for early stopping
@@ -332,8 +334,12 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         epoch_logging = f"Epoch {epoch+1}: "
 
         if use_dp and privacy_engine is not None:
-            epsilon_spent = privacy_engine.get_epsilon(delta)
-            epoch_logging += f"ε = {epsilon_spent:.4f}, δ = {delta} | "
+            actual_epsilon = privacy_engine.get_epsilon(delta)
+            epoch_logging += (
+                f"Target ε = {target_epsilon:.4f},"
+                f" Actual ε = {actual_epsilon:.4f},"
+                f" δ = {delta} | "
+            )
 
         epoch_logging += (
             f"Training Loss = {avg_train_loss:.4f}, "
@@ -365,7 +371,10 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
             print(f"Early stopping triggered after {epoch+1} epochs.")
             break # Early stopping...
     
-    return (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], best_model_state) if all_metrics else best_f1
+    if use_dp:
+        return (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], privacy_engine.get_epsilon(delta), privacy_engine.noise_multiplier, best_model_state) if all_metrics else best_f1
+    else:
+        return (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], best_model_state) if all_metrics else best_f1
 
 def evaluate_model(model, val_loader):
     """
@@ -414,78 +423,6 @@ def evaluate_model(model, val_loader):
 
     return acc, precision, recall, f1
 
-def objective(trial):
-    """
-    Objective function for Optuna hyperparameter optimization.
-
-    - Samples a set of hyperparameters from defined search spaces.
-    - Constructs and trains a CNN model with the suggested parameters.
-    - Evaluates model performance on the validation set.
-    - Saves the current trial's performance metrics and hyperparameters to a CSV file.
-    - Saves the model checkpoint if it achieves the best F1 score so far.
-
-    Args:
-        trial (optuna.trial.Trial): A trial object from Optuna used to suggest hyperparameters 
-                                    and store results.
-
-    Returns:
-        float: The F1 score on the validation set, used as the optimization objective.
-    """
-    global initial_completed
-
-    # Hyperparameters to explore
-    lr = trial.suggest_float("lr", OPTUNA_LR_MIN, OPTUNA_LR_MAX, log=True)
-    dropout = trial.suggest_float("dropout", OPTUNA_DROPOUT_MIN, OPTUNA_DROPOUT_MAX)
-    batch_size = trial.suggest_categorical("batch_size", OPTUNA_BATCH_SIZE_VALS)
-    num_channels = trial.suggest_categorical("num_channels", OPTUNA_NUM_CHANNELS_VALS)
-    layer_count = trial.suggest_int("layer_count", OPTUNA_LAYERS_MIN, OPTUNA_LAYERS_MAX)
-
-    # Calculate how many trials are left in this training run
-    trials_left = OPTUNA_N_TRIALS - (trial.number - initial_completed)
-
-    # Log current trial hyperparameter details
-    print('_____________________________________________________________')
-    print(f"\nTrial {trial.number}: Testing {layer_count}-layer CNN...")
-    print(f"Learning Rate: {lr}")
-    print(f"Batch Size: {batch_size}")
-    print(f"Number of Channels: {num_channels}")
-    print(f"Dropout: {dropout}")
-    print(f"{trials_left}/{OPTUNA_N_TRIALS} remaining...\n")
-
-    # Load data and train
-    train_loader, val_loader = load_data(X_PATH, Y_PATH, batch_size)
-    model = make_cnn(layer_count, num_channels, dropout)
-    val_loss, acc, precision, recall, f1, model_state = train_model(model, train_loader, val_loader, lr)
-
-    trial.set_user_attr("accuracy", acc)
-    trial.set_user_attr("precision", precision)
-    trial.set_user_attr("recall", recall)
-    trial.set_user_attr("val_loss", val_loss)
-
-    write_headers = not os.path.exists(OPTUNA_RESULTS_FILE_PATH)
-
-    with open(OPTUNA_RESULTS_FILE_PATH, mode="a", newline="") as file:
-        writer = csv.writer(file)
-        if write_headers:
-            writer.writerow([
-                "trial", "f1", "precision", "recall", "accuracy", "val_loss",
-                "learning_rate", "dropout", "batch_size", "num_channels", "layer_count"
-            ])
-        writer.writerow([
-            trial.number, f1, precision, recall, acc, val_loss,
-            lr, dropout, batch_size, num_channels, layer_count
-        ])
-
-    if model_state:
-        os.makedirs(MODEL_DIR_PATH, exist_ok=True)
-        torch.save(model_state, MODEL_DIR_PATH  / f"model-t{trial.number}-lc{layer_count}-f1{f1:.3f}.pt")
-
-        if f1 > objective.best_f1:
-            torch.save(model_state, BEST_MODEL_FILE_PATH)
-            objective.best_f1 = f1
-
-    return f1  # Maximizing F1 score
-
 def main():
     """
     Runs Optuna hyperparameter optimization and evaluates the best CNN model.
@@ -499,105 +436,90 @@ def main():
     Returns:
         None
     """
-    global initial_completed
+    # Load hyperparameteres with best performance on dataset
+    hyperparams = dict()
+    with open(BEST_MODEL_HYPERPARAMS_FILE_PATH, 'r') as csv_file:
+        csv_reader = csv.DictReader(csv_file)
+        hyperparams = next(csv_reader, {}) # Default to empty dictionary
+        hyperparams = {
+            "layer_count": int(hyperparams["layer_count"]),
+            "learning_rate": float(hyperparams["learning_rate"]),
+            "batch_size": int(hyperparams["batch_size"]),
+            "num_channels": int(hyperparams["num_channels"]),
+            "dropout": float(hyperparams["dropout"]),
+        }
 
-    # === Testing Hyperparameter Combinations to Optimize Model Performance  ===
-    objective.best_f1 = 0.0 # Tracking best overall model
+    # === Train Model at Various DP Levels ===
+    print(f"\n{'_' * 30}")
+    print(f"TRAINING models with DP-SGD...")
 
-    os.makedirs(METRICS_DIR_PATH, exist_ok=True)
-    os.makedirs(OPTUNA_STORAGE_DIR_PATH, exist_ok=True)
-    # if os.path.exists(OPTUNA_RESULTS_FILE_PATH): os.remove(OPTUNA_RESULTS_FILE_PATH)
+    os.makedirs(DP_METRICS_DIR_PATH, exist_ok=True)
+    if not os.path.exists(DP_TRAIN_RESULTS_FILE_PATH):
+        with open(DP_TRAIN_RESULTS_FILE_PATH, 'w') as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(["target_ε", "actual_ε", "noise_multiplier", "val_loss", "accuracy", "precision", "recall", "f1"])
 
-    study = optuna.create_study(
-                        study_name=OPTUNA_STUDY_NAME,
-                        direction="maximize",
-                        storage=OPTUNA_STORAGE_PATH,
-                        load_if_exists=True # Resume progress if exists
-                    )
-    initial_completed = len(study.trials)
-    study.optimize(objective, n_trials=OPTUNA_N_TRIALS)
+    for epsilon in EPSILON_VALS:
+        print(f"Training ε = {epsilon}:")
+        train_loader, val_loader = load_data(X_PATH, Y_PATH, hyperparams.get("batch_size", DEFAULT_BATCH_SIZE))
+        model = make_cnn(
+            layer_count=hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
+            num_channels=hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS),
+            dropout=hyperparams.get("dropout", DEFAULT_DROPOUT)
+        )
+        val_loss, accuracy, precision, recall, f1, actual_epsilon, noise_multiplier, model_state = train_model(
+                                                                        model, 
+                                                                        train_loader, 
+                                                                        val_loader, 
+                                                                        hyperparams.get("learning_rate", DEFAULT_LEARNING_RATE),
+                                                                        use_dp=True,
+                                                                        target_epsilon=epsilon,
+                                                                        delta=DELTA_VAL,
+                                                                        clipping_norm=CLIPPING_NORM
+                                                                        )
 
-    print("Number of finished trials:", len(study.trials))
-    print("\nBest trial:")
-    print(study.best_trial)
-    print("Performance Metrics:")
-    print(study.best_trial.user_attrs)
-    print(f"Best F1 Score: {study.best_trial.value:.4f}")
+        with open(DP_TRAIN_RESULTS_FILE_PATH, 'a') as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow([epsilon, actual_epsilon, noise_multiplier, val_loss, accuracy, precision, recall, f1])
+        
+        if model_state:
+            os.makedirs(DP_MODEL_DIR_PATH, exist_ok=True)
+            torch.save(model_state, DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}.pt")
 
-    # === Best Model Evaluation ===
-    print("\nEvaluating best model with best trial parameters...")
 
-    best_params = study.best_trial.params
-    best_model = make_cnn(
-        layer_count=best_params["layer_count"],
-        num_channels=best_params["num_channels"],
-        dropout=best_params["dropout"]
-    )
-    best_model.load_state_dict(torch.load(BEST_MODEL_FILE_PATH))
+    # === Evaluation of DP-SGD Models ===
+    print(f"\n{'_' * 30}")
+    print("EVALUATING DP-SGD models...")
 
-    # Reload data with best batch size
-    _, val_loader = load_data(X_PATH, Y_PATH, best_params["batch_size"])
+    if not os.path.exists(DP_EVAL_METRICS_FILE_PATH):
+        with open(DP_EVAL_METRICS_FILE_PATH, "w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(["ε", "accuracy", "precision", "recall", "f1"])
+    
+    for epsilon in EPSILON_VALS:
+        print(f"Evaluating ε = {epsilon}:")
+        model = make_cnn(
+            layer_count=hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
+            num_channels=hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS),
+            dropout=hyperparams.get("dropout", DEFAULT_DROPOUT)
+        )
+        model.load_state_dict(torch.load(DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}.pt"))
 
-    # Re-evaluate on validation data
-    acc, precision, recall, f1 = evaluate_model(best_model, val_loader)
+        # Reload data with best batch size
+        _, val_loader = load_data(X_PATH, Y_PATH, hyperparams.get("batch_size", DEFAULT_BATCH_SIZE))
 
-    print("\nFinal Evaluation of Best Model:")
-    print(f"Accuracy: {acc:.4f}")
-    print(f"Precision: {precision:.4f}")
-    print(f"Recall: {recall:.4f}")
-    print(f"F1 Score: {f1:.4f}")
+        # Re-evaluate on validation data
+        accuracy, precision, recall, f1 = evaluate_model(model, val_loader)
 
-    with open(BEST_MODEL_HYPERPARAMS_FILE_PATH, "w", newline="") as csvFile:
-        csvWriter = csv.writer(csvFile)
-        csvWriter.writerow(["layer_count", "learning_rate", "batch_size", "num_channels", "dropout"])
-        csvWriter.writerow(
-            [best_params["layer_count"], 
-             best_params["lr"], 
-             best_params["batch_size"], 
-             best_params["num_channels"], 
-             best_params["dropout"]]
-            )
+        print(f"Accuracy: {accuracy:.4f}")
+        print(f"Precision: {precision:.4f}")
+        print(f"Recall: {recall:.4f}")
+        print(f"F1 Score: {f1:.4f}\n")
 
-    # Output FINAL best model performance metrics to CSV file
-    with open(BEST_MODEL_METRICS_FILE_PATH, "w", newline="") as csvFile:
-        csvWriter = csv.writer(csvFile)
-        csvWriter.writerow(["accuracy", "precision", "recall", "f1"])
-        csvWriter.writerow([acc, precision, recall, f1])
-
-    # TODO: Uncomment for running model without tuning hyperparameteres
-    # # Load Data
-    # train_loader, val_loader = load_data(X_PATH, Y_PATH, BATCH_SIZE)
-
-    # # Testing n-layer CNN
-    # print(f"\nTesting {LAYER_COUNT}-layer CNN...")
-    # print(f"Learning Rate: {LEARNING_RATE}")
-    # print(f"Batch Size: {BATCH_SIZE}")
-    # print(f"Number of Channels: {NUM_CHANNELS}")
-    # # print(f"Number of Epochs: {NUM_EPOCHS}")
-    # print(f"Dropout: {DROPOUT}")
-    # print()
-    # model = make_cnn(LAYER_COUNT, NUM_CHANNELS, DROPOUT)
-    # train_model(model, train_loader, val_loader, LEARNING_RATE)
-
-    # # Testing 3-layer CNN
-    # print("\nTesting 3-layer CNN...")
-    # model_3 = make_cnn(layer_count=3)
-    # train_model(model_3, train_loader, val_loader)
-
-    # # Testing 5-layer CNN
-    # print("\nTesting 5-layer CNN...")
-    # model_5 = make_cnn(layer_count=5)
-    # train_model(model_5, train_loader, val_loader)
-
-    # # Testing 7-layer CNN
-    # print("\nTesting 7-layer CNN...")
-    # model_7 = make_cnn(layer_count=7)
-    # train_model(model_7, train_loader, val_loader)
-
-    # # Testing 10-layer CNN
-    # print("\nTesting 10-layer CNN...")
-    # model_10 = make_cnn(layer_count=10)
-    # train_model(model_10, train_loader, val_loader)
+        # Output current epsilon performance metrics to CSV file
+        with open(DP_EVAL_METRICS_FILE_PATH, "a", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow([epsilon, accuracy, precision, recall, f1])
 
 if __name__ == "__main__":
     set_seed(RANDOM_SEED)
