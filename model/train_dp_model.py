@@ -1,4 +1,5 @@
 import csv
+from datetime import datetime
 import os
 # Tells PyTorch to allow more flexible GPU memory allocation (helps prevent CUDA out of memory errors)
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -25,69 +26,78 @@ TODO: Turn on for final training run and reporting official ε values in paper/d
 """
 SECURE_MODE = False
 
+"""
+Opacus DP-SGD Config
+"""
 # Epsilon values to test (weakest to strongest)
 EPSILON_VALS = [8.0, 4.0, 2.0, 1.0, 0.5]
-
 # Delta value: Failure probability (acceptable risk of privacy leakage)
 DELTA_VAL = 1e-5
-
 # Gradient clipping: maximum L2 norm for per-sample gradients
 CLIPPING_NORM = 1.0
 
+"""
+Environment Config
+"""
 # Detect if running in Google Colab
 IS_COLAB = "google.colab" in sys.modules
-
 # Root project path for Google Colab
 COLAB_ROOT = "/content/drive/MyDrive/Summer2025/CSC499/dp-fall-detection"
-
 # Root project path for local machine (one level up from this script)
 LOCAL_ROOT = Path(__file__).resolve().parents[1]
-
 # Dynamically resolve project root based on environment 
 PROJECT_ROOT = COLAB_ROOT if IS_COLAB else LOCAL_ROOT
 
+"""
+Directory and File Paths
+"""
 # Training model input files: windowed IMU data and binary labels in .npy format
 X_PATH = PROJECT_ROOT / "data/windows/X_windows.npy"
 Y_PATH = PROJECT_ROOT / "data/windows/y_labels.npy"
-
 # Directory for saving model checkpoint files (best performing CNN weights)
 MODEL_DIR_PATH = PROJECT_ROOT / "model" / "checkpoints"
-
 # Directory for saving DP model fall classifiers
 DP_MODEL_DIR_PATH = PROJECT_ROOT / "model" / "dp_fall_detection"
-
 # Directory for model evaluation metrics and Optuna optimization results
 METRICS_DIR_PATH = PROJECT_ROOT / "results"
-
 # Directory for DP model evaluation metrics
 DP_METRICS_DIR_PATH = METRICS_DIR_PATH / "dp"
-
 # File path for DP-SGD training results for each epsilon value
 DP_TRAIN_RESULTS_FILE_PATH = DP_METRICS_DIR_PATH / "dp_training_results.csv"
-
 # File path for DP-SGD evaluation metrics (reloaded model re-evaluation)
 DP_EVAL_METRICS_FILE_PATH = DP_METRICS_DIR_PATH / "dp_eval_metrics.csv"
-
 # File path for best non-DP model performance metrics
 BEST_MODEL_METRICS_FILE_PATH = METRICS_DIR_PATH / "best_model_metrics.csv"
-
 # File path for best model hyperparameters from Optuna tuning
 BEST_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_model_hyperparams.csv"
 
+"""
+Training Config
+"""
 # Random seed for reproducibility across data splits, weight init, and tuning
 RANDOM_SEED = 42
-
 # Number of training epochs per model
 NUM_EPOCHS = 30
-
 # Number of epochs to wait without F1 improvement before stopping early
 EARLY_STOPPING_PATIENCE = 5
-
 # Threshold for classifying sigmoid output (0.0–1.0) as binary class
 SIGMOID_BINARY_CLASSIFICATION_THRESHOLD = 0.5
-
 # Expanded alpha values for tighter RDP-based epsilon accounting
 # ALPHAS = [1 + x / 10.0 for x in range(1, 200)] + list(range(21, 128))
+
+"""
+Terminal Output Color Adjustments
+"""
+# Datetime color
+GREEN = '\033[32m'
+# Epoch label color
+BLUE = '\033[34m'
+# Training/Evaluating label color
+RED = '\033[31m'
+# Training DP level label color
+PURPLE = '\033[35m'
+# RESET to default color
+RESET = '\033[0m'
 
 """
 Default Hyperparameters (used when Optuna-derived parameters are unavailable)
@@ -98,7 +108,30 @@ DEFAULT_LEARNING_RATE = 0.003167
 DEFAULT_BATCH_SIZE = 64 # Decreased to fit cuda memory
 DEFAULT_DROPOUT = 0.3606
 # DEFAULT_NUM_CHANNELS = 256
-DEFAULT_NUM_CHANNELS = 64
+DEFAULT_NUM_CHANNELS = 64 # Decreased to fit cuda memory
+
+def color_str(str, color_code):
+    """
+    Wraps a given string with ANSI escape codes to display colored text in the terminal.
+
+    Args:
+        str (str): The text to be colored.
+        color (str): The ANSI escape code representing the desired text color.
+
+    Returns:
+        str: The input text wrapped with the provided color code and a reset code to return to default styling.
+    """
+    return f'{color_code}{str}{RESET}'
+
+def timestamp_now():
+    """
+    Returns the current date and time formatted as a timestamp ('[YYYY-MM-DD HH:MM:SS]'), 
+    wrapped in green color for terminal output.
+
+    Returns:
+        str: A string containing the formatted timestamp wrapped in color escape codes.
+    """
+    return color_str(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", GREEN)
 
 def flatten_and_normalize_data(X):
     """
@@ -278,7 +311,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
                 Returns best F1 score achieved.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Fall back to CPU when no GPU
-    print("🚀 Device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU detected")
+    # print("🚀 Device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU detected")
     print("Using device:", device)
 
     model.to(device)
@@ -370,14 +403,14 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         avg_train_loss = train_loss / len(train_loader)
         avg_val_loss = val_loss / len(val_loader)
 
-        epoch_logging = f"Epoch {epoch+1}: "
+        epoch_logging = color_str(f"Epoch {epoch+1}: ", BLUE)
 
         if use_dp and privacy_engine is not None:
             actual_epsilon = privacy_engine.get_epsilon(delta)
             epoch_logging += (
                 f"Target ε = {target_epsilon:.4f},"
                 f" Actual ε = {actual_epsilon:.4f},"
-                f" δ = {delta} | "
+                f" δ = {delta}\n"
             )
 
         epoch_logging += (
@@ -501,18 +534,95 @@ def main():
     hyperparams["num_channels"] = min(hyperparams["num_channels"], DEFAULT_NUM_CHANNELS)
 
     print(f"Secure Mode: {'ON' if SECURE_MODE else 'OFF'}")
-    # === Train Model at Various DP Levels ===
+
+    # === Train Baseline Model ===
     print(f"\n{'_' * 30}")
-    print(f"TRAINING models with DP-SGD...")
+    print(color_str("TRAINING baseline model...", RED))
 
     os.makedirs(DP_METRICS_DIR_PATH, exist_ok=True)
     if not os.path.exists(DP_TRAIN_RESULTS_FILE_PATH):
         with open(DP_TRAIN_RESULTS_FILE_PATH, 'w') as csv_file:
             csv_writer = csv.writer(csv_file)
             csv_writer.writerow(["target_ε", "actual_ε", "noise_multiplier", "val_loss", "accuracy", "precision", "recall", "f1"])
+    
+    # Train once with Non-DP Fall Detection Classifier to achieve true upper bound of model performance 
+    print(color_str(f"\nTraining model without ε:", PURPLE))
+    train_loader, val_loader = load_data(X_PATH, Y_PATH, hyperparams.get("batch_size", DEFAULT_BATCH_SIZE))
+    model = make_cnn(
+        layer_count=hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
+        num_channels=hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS),
+        dropout=hyperparams.get("dropout", DEFAULT_DROPOUT)
+    )
+    val_loss, accuracy, precision, recall, f1, model_state = train_model(
+                                                                    model, 
+                                                                    train_loader, 
+                                                                    val_loader, 
+                                                                    hyperparams.get("learning_rate", DEFAULT_LEARNING_RATE),
+                                                                    use_dp=False
+                                                                    )
+    
+    # Only save model and log results if training produced a valid model state and non-zero F1
+    if model_state and f1 > 0 and not np.isnan(f1):
+        os.makedirs(DP_MODEL_DIR_PATH, exist_ok=True)
+        torch.save(model_state, DP_MODEL_DIR_PATH / f"dp-model-baseline.pt")
+
+        with open(DP_TRAIN_RESULTS_FILE_PATH, 'a') as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow([
+                'None',
+                'None',
+                'None',
+                val_loss,
+                accuracy,
+                precision,
+                recall,
+                f1
+            ])
+    else:
+        print(f"Skipping logging/saving for baseline due to invalid metrics.")
+
+    # === Evaluation of Baseline Model ===
+    print(f"\n{'_' * 30}")
+    print(color_str("EVALUATING baseline model...", RED))
+
+    if not os.path.exists(DP_EVAL_METRICS_FILE_PATH):
+        with open(DP_EVAL_METRICS_FILE_PATH, "w", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(["ε", "accuracy", "precision", "recall", "f1"])
+
+    print(color_str(f"\nEvaluating model without ε:", PURPLE))
+
+    reload_model_path = DP_MODEL_DIR_PATH / f"dp-model-baseline.pt"
+    if reload_model_path.exists():
+        model = make_cnn(
+            layer_count=hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
+            num_channels=hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS),
+            dropout=hyperparams.get("dropout", DEFAULT_DROPOUT)
+        )
+        model.load_state_dict(torch.load(reload_model_path))
+
+        # Reload data with best batch size
+        _, val_loader = load_data(X_PATH, Y_PATH, hyperparams.get("batch_size", DEFAULT_BATCH_SIZE))
+
+        # Re-evaluate on validation data
+        accuracy, precision, recall, f1 = evaluate_model(model, val_loader)
+
+        print(f"Accuracy: {accuracy:.4f}")
+        print(f"Precision: {precision:.4f}")
+        print(f"Recall: {recall:.4f}")
+        print(f"F1 Score: {f1:.4f}\n")
+
+        # Output current epsilon performance metrics to CSV file
+        with open(DP_EVAL_METRICS_FILE_PATH, "a", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(['None', accuracy, precision, recall, f1])
+
+    # === Train Model at Various DP Levels ===
+    print(f"\n{'_' * 30}")
+    print(color_str("TRAINING models with DP-SGD...", RED))
 
     for epsilon in EPSILON_VALS:
-        print(f"Training ε = {epsilon}:")
+        print(color_str(f"\nTraining ε = {epsilon}:", PURPLE))
         train_loader, val_loader = load_data(X_PATH, Y_PATH, hyperparams.get("batch_size", DEFAULT_BATCH_SIZE))
         model = make_cnn(
             layer_count=hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
@@ -550,18 +660,12 @@ def main():
         else:
             print(f"Skipping logging/saving for ε = {epsilon:.2f} due to invalid metrics.")
 
-
     # === Evaluation of DP-SGD Models ===
     print(f"\n{'_' * 30}")
-    print("EVALUATING DP-SGD models...")
-
-    if not os.path.exists(DP_EVAL_METRICS_FILE_PATH):
-        with open(DP_EVAL_METRICS_FILE_PATH, "w", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(["ε", "accuracy", "precision", "recall", "f1"])
+    print(color_str("EVALUATING DP-SGD models...", RED))
     
     for epsilon in EPSILON_VALS:
-        print(f"Evaluating ε = {epsilon}:")
+        print(color_str(f"\nEvaluating ε = {epsilon}:", PURPLE))
 
         reload_model_path = DP_MODEL_DIR_PATH / f"dp-model-eps{epsilon:.2f}.pt"
         if not reload_model_path.exists():
