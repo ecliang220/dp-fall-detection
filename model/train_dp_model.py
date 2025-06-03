@@ -11,6 +11,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import precision_score, recall_score, f1_score
 from pathlib import Path
 from opacus import PrivacyEngine
+from opacus.utils.uniform_sampler import UniformWithReplacementSampler
 
 """
 When True, Opacus will use a cryptographically secure random number generator (CSPRNG) for 
@@ -176,7 +177,16 @@ def load_data(x_path, y_path, batch_size):
     val_size = len(dataset) - train_size
     train_set, val_set = random_split(dataset, [train_size, val_size])
 
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    # train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    sample_rate = batch_size / len(train_set)
+    train_loader = DataLoader(
+        train_set,
+        batch_sampler=UniformWithReplacementSampler(
+            num_samples=len(train_set),
+            sample_rate=sample_rate,
+        ),
+        num_workers=0,  # TODO: Increase if memory allows
+    )
     val_loader = DataLoader(val_set, batch_size=batch_size)
 
     return train_loader, val_loader
