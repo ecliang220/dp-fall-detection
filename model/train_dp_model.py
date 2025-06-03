@@ -90,7 +90,8 @@ Default Hyperparameters (used when Optuna-derived parameters are unavailable)
 """
 DEFAULT_LAYER_COUNT = 5
 DEFAULT_LEARNING_RATE = 0.003167
-DEFAULT_BATCH_SIZE = 128
+# DEFAULT_BATCH_SIZE = 128
+DEFAULT_BATCH_SIZE = 64 # Decreased to fit cuda memory
 DEFAULT_DROPOUT = 0.3606
 DEFAULT_NUM_CHANNELS = 256
 
@@ -467,7 +468,7 @@ def main():
     Returns:
         None
     """
-    # Load hyperparameteres with best performance on dataset
+    # Load hyperparameters with best performance on dataset
     hyperparams = dict()
     with open(BEST_MODEL_HYPERPARAMS_FILE_PATH, 'r') as csv_file:
         csv_reader = csv.DictReader(csv_file)
@@ -479,6 +480,10 @@ def main():
             "num_channels": int(hyperparams["num_channels"]),
             "dropout": float(hyperparams["dropout"]),
         }
+
+    # TODO: Batch size capped to DEFAULT_BATCH_SIZE to fit within Opacus/DP memory constraints. Remove if more memory available.
+    hyperparams["batch_size"] = min(hyperparams["batch_size"], DEFAULT_BATCH_SIZE)
+
     print(f"Secure Mode: {'ON' if SECURE_MODE else 'OFF'}")
     # === Train Model at Various DP Levels ===
     print(f"\n{'_' * 30}")
