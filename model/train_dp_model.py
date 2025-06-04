@@ -111,6 +111,8 @@ BLUE = '\033[34m'
 RED = '\033[31m'
 # Training DP level label color
 PURPLE = '\033[35m'
+# Miscellaneous label color
+BRIGHT_BLUE = '\033[94m'
 # RESET to default color
 RESET = '\033[0m'
 
@@ -372,8 +374,8 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
             max_grad_norm=clipping_norm
         )
         noise_multiplier = optimizer.noise_multiplier
-
-        print(f"DP-SGD enabled: Target ε={target_epsilon}, δ={delta}, Clip={clipping_norm}, Noise Multiplier={noise_multiplier:.4f}")
+    
+        print(color_text(f"DP-SGD enabled: Target ε={target_epsilon}, δ={delta}, Clip={clipping_norm}, Noise Multiplier={noise_multiplier:.4f}", BRIGHT_BLUE))
     else: privacy_engine = None
     
     # Tracking variables for early stopping

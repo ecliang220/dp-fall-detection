@@ -122,6 +122,8 @@ RED = '\033[31m'
 PURPLE = '\033[35m'
 # Section (Study/Evaluation) label color
 BRIGHT_MAGENTA = '\033[95m'
+# Miscellaneous label color
+BRIGHT_BLUE = '\033[94m'
 # RESET to default color
 RESET = '\033[0m'
 
@@ -408,7 +410,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         )
         noise_multiplier = optimizer.noise_multiplier
 
-        print(f"DP-SGD enabled: Target ε={target_epsilon}, δ={delta}, Clip={clipping_norm}, Noise Multiplier={noise_multiplier:.4f}")
+        print(color_text(f"DP-SGD enabled: Target ε={target_epsilon}, δ={delta}, Clip={clipping_norm}, Noise Multiplier={noise_multiplier:.4f}", BRIGHT_BLUE))
     else: privacy_engine = None
     
     # Tracking variables for early stopping
@@ -604,8 +606,7 @@ def objective(trial):
     print(f"Clipping Norm: {clipping_norm}")
     print(f"Number of Channels: {num_channels}")
     print(f"Layer Count: {layer_count}")
-    
-    print(f"\n{trials_left}/{OPTUNA_N_TRIALS} remaining...\n")
+    print(f"{trials_left}/{OPTUNA_N_TRIALS} trials remaining...\n")
 
     # Load data and train
     train_loader, val_loader = load_data(X_PATH, Y_PATH, DEFAULT_BATCH_SIZE)

@@ -418,7 +418,7 @@ def objective(trial):
     print(f"Batch Size: {batch_size}")
     print(f"Number of Channels: {num_channels}")
     print(f"Dropout: {dropout}")
-    print(f"{trials_left}/{OPTUNA_N_TRIALS} remaining...\n")
+    print(f"{trials_left}/{OPTUNA_N_TRIALS} trials remaining...\n")
 
     # Load data and train
     train_loader, val_loader = load_data(X_PATH, Y_PATH, batch_size)
