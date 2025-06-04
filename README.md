@@ -14,6 +14,7 @@ This project implements a binary classifier to detect human falls using wearable
     │ ├── checkpoints/                  # Best-performing non-DP model weights (for baseline evaluation)
     │ ├── dp_fall_detection/            # Saved DP model weights (one per ε level)
     │ ├── identity_checkpoints/         # Trained identity classifier weights
+    │ ├── dp_hyperparam_tuning.py       # Optuna-based hyperparameter tuning for DP-SGD CNNs (privacy-aware fall detection)
     │ ├── evaluate_dp_model.py          # Evaluates baseline and DP-trained CNNs, logs performance metrics to CSV
     │ ├── evaluate_model.py             # Loads best model from Optuna tuning and evaluates on validation set
     │ ├── train_dp_model.py             # Main DP-SGD training pipeline (binary fall detection)
