@@ -73,15 +73,15 @@ Directory and File Paths
 X_PATH = PROJECT_ROOT / "data/windows/X_windows.npy"
 Y_PATH = PROJECT_ROOT / "data/windows/y_labels.npy"
 # Directory for saving DP model checkpoint files (best performing CNN weights)
-MODEL_DIR_PATH = PROJECT_ROOT / "model" / "dp"
+MODEL_DIR_PATH = PROJECT_ROOT / "model"
 # Directory for saving DP model fall classifiers
-DP_MODEL_DIR_PATH = PROJECT_ROOT / "model" / "dp_fall_detection"
+DP_MODEL_DIR_PATH = MODEL_DIR_PATH / "dp_fall_detection"
 # Directory for model evaluation metrics and Optuna optimization results
 METRICS_DIR_PATH = PROJECT_ROOT / "results"
 # Directory for DP model evaluation metrics
 DP_METRICS_DIR_PATH = METRICS_DIR_PATH / "dp"
 # File path for trained best dp model
-BEST_MODEL_FILE_PATH = MODEL_DIR_PATH / "best_dp_model.pt"
+BEST_MODEL_FILE_PATH = DP_MODEL_DIR_PATH / "best_dp_model.pt"
 # File path for best DP binary fall detection classifier performance metrics
 BEST_MODEL_METRICS_FILE_PATH = METRICS_DIR_PATH / "best_dp_model_metrics.csv"
 # File path for best DP model hyperparameters from Optuna tuning
@@ -644,8 +644,8 @@ def objective(trial):
     if opacus_model_state:
         model_state = remove_opacus_prefix(opacus_model_state)
         
-        os.makedirs(MODEL_DIR_PATH, exist_ok=True)
-        torch.save(model_state, MODEL_DIR_PATH  / f"dp-model-t{trial.number}-f1{f1:.3f}-{training_start_time}.pt")
+        os.makedirs(DP_MODEL_DIR_PATH, exist_ok=True)
+        torch.save(model_state, DP_MODEL_DIR_PATH  / f"dp-model-t{trial.number}-f1{f1:.3f}-{training_start_time}.pt")
 
         if f1 > objective.best_f1:
             torch.save(model_state, BEST_MODEL_FILE_PATH)
