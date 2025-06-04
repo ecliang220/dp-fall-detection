@@ -82,10 +82,6 @@ METRICS_DIR_PATH = PROJECT_ROOT / "results"
 DP_METRICS_DIR_PATH = METRICS_DIR_PATH / "dp"
 # File path for trained best dp model
 BEST_MODEL_FILE_PATH = MODEL_DIR_PATH / "best_dp_model.pt"
-# File path for DP-SGD training results for each epsilon value
-DP_TRAIN_RESULTS_FILE_PATH = DP_METRICS_DIR_PATH / "dp_training_results.csv"
-# File path for DP-SGD evaluation metrics (reloaded model re-evaluation)
-DP_EVAL_METRICS_FILE_PATH = DP_METRICS_DIR_PATH / "dp_eval_metrics.csv"
 # File path for best DP binary fall detection classifier performance metrics
 BEST_MODEL_METRICS_FILE_PATH = METRICS_DIR_PATH / "best_dp_model_metrics.csv"
 # File path for best DP model hyperparameters from Optuna tuning
@@ -143,7 +139,7 @@ Optuna Config
 """
 OPTUNA_STORAGE_DIR_PATH = PROJECT_ROOT / "storage"
 OPTUNA_STORAGE_PATH = f"sqlite:///{str(Path(PROJECT_ROOT) / 'storage' / 'dp_optuna_fall_detection.db')}"
-OPTUNA_RESULTS_FILE_PATH = METRICS_DIR_PATH / "dp_optuna_results.csv"
+OPTUNA_RESULTS_FILE_PATH = DP_METRICS_DIR_PATH / "dp_optuna_results.csv"
 
 OPTUNA_STUDY_NAME = "dp_CNN_fall_detection_optimization"
 OPTUNA_N_TRIALS = 30 # more trials to run
