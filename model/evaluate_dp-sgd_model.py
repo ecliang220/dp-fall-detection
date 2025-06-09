@@ -1,5 +1,5 @@
 """
-evaluate_dp_model.py
+evaluate_dp-sgd_model.py
 
 Evaluates CNN models trained for fall detection using IMU sensor data, including:
 - A baseline model without differential privacy (DP)

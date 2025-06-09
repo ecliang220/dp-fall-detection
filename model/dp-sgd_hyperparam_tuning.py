@@ -1,5 +1,5 @@
 """
-dp_hyperparam_tuning.py
+dp-sgd_hyperparam_tuning.py
 
 Tunes and evaluates CNN models for fall detection using IMU sensor data with differential privacy (DP-SGD via Opacus).
 Uses Optuna to optimize hyperparameters for improved performance under a fixed privacy budget (ε).

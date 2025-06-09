@@ -1,5 +1,5 @@
 """
-train_dp_model.py
+train_dp-sgd_model.py
 
 Trains and evaluates CNN models for fall detection using IMU sensor data.
 Supports both standard training and differential privacy (DP-SGD) via Opacus.
