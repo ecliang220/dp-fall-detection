@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from util.util import print_with_timestamp, print_color_text_with_timestamp, print_color_text, bold_text, get_timestamp_now
+from util.util import print_with_timestamp, print_color_text_with_timestamp, print_color_text, bold_text, get_timestamp_now, set_seed
 
 # --------------------------------------------------------------------
 # Environment Config
@@ -49,6 +49,8 @@ EPSILON_VALS = [8.0, 4.0, 2.0, 1.0, 0.5]
 DECAY_FACTOR = 0.95
 # Numerical jitter added to the diagonal to ensure positive-definiteness
 JITTER_EPS = 1e-6
+# Boolean value indicating whether to skip or overwrite existing files for reruns of epsilon values
+SKIP_EXISTING = False
 
 # --------------------------------------------------------------------
 # Directory and File Paths
@@ -217,7 +219,7 @@ def main():
         windows_file_path = clm_dp_output_dir_path / WINDOWS_FILE_NAME
         labels_file_path = clm_dp_output_dir_path / LABELS_FILE_NAME
 
-        if all(path.exists() for path in [clm_dp_output_dir_path, windows_file_path, labels_file_path]):
+        if SKIP_EXISTING and all(path.exists() for path in [clm_dp_output_dir_path, windows_file_path, labels_file_path]):
             print_color_text_with_timestamp(f"⚠️Skipping {bold_text(f"ε = {epsilon}")}: files already exist at {clm_dp_output_dir_path}", "YELLOW")
             continue
 
@@ -239,4 +241,5 @@ def main():
     print_color_text(LOG_FILE_PATH, "BLUE")
 
 if __name__ == '__main__':
+    set_seed() # Default seed value is 42
     main()
