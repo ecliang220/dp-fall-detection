@@ -14,7 +14,7 @@ import optuna
 
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from model_evaluation import *
+from model.model_util import *
 
 # Initial number of trials completed when Optuna study is loaded
 initial_completed = 0

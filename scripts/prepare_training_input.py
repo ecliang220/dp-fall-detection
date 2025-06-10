@@ -8,7 +8,7 @@ import sys
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from util.util import print_color_text_with_timestamp, print_color_text
-from model.model_evaluation import WINDOWS_DIR_PATH, X_PATH, Y_FALL_PATH, Y_IDENTITY_PATH
+from model.model_util import WINDOWS_DIR_PATH, X_PATH, Y_FALL_PATH, Y_IDENTITY_PATH
 
 # Directory containing preprocessed CSV files (1 file = 1 trial)
 ROOT_INPUT_DIR_PATH = Path("../data/preprocessed")

@@ -27,7 +27,7 @@ from tqdm import tqdm
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from util.util import print_with_timestamp, print_color_text_with_timestamp, print_color_text, bold_text, get_timestamp_now
-from model.model_evaluation import set_seed
+from model.model_util import set_seed
 
 # --------------------------------------------------------------------
 # Environment Config
