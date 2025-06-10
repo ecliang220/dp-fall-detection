@@ -23,12 +23,14 @@ LOCAL_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = COLAB_ROOT if IS_COLAB else LOCAL_ROOT
 
 # --------------------------------------------------------------------
-# Training Config
+# Model Config
 # --------------------------------------------------------------------
 # Threshold for classifying sigmoid output (0.0–1.0) as binary class
 SIGMOID_BINARY_CLASSIFICATION_THRESHOLD = 0.5
 # Random seed for reproducibility
 RANDOM_SEED = 42
+# Number of classes for training IDENTITY inference classifier
+NUM_CLASSES = 38 # Model will output 38 class scores
 
 # --------------------------------------------------------------------
 # Directory and File Paths/Names
@@ -75,8 +77,8 @@ BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_identity_mo
 # Optuna Config
 # --------------------------------------------------------------------
 OPTUNA_STORAGE_DIR_PATH = PROJECT_ROOT / "storage"
-OPTUNA_STORAGE_PATH = f"sqlite:///{str(Path(PROJECT_ROOT) / 'storage' / 'optuna_identity_inference.db')}"
-OPTUNA_STUDY_NAME = "CNN_identity_classification_optimization"
+OPTUNA_IDENTITY_STORAGE_PATH = f"sqlite:///{str(Path(PROJECT_ROOT) / 'storage' / 'optuna_identity_inference.db')}"
+OPTUNA_IDENTITY_STUDY_NAME = "CNN_identity_classification_optimization"
 
 def set_seed(seed=RANDOM_SEED):
     """
@@ -145,7 +147,7 @@ def load_data(x_path, y_path, batch_size):
     return train_loader, val_loader
 
 
-def make_cnn(layer_count, num_channels, dropout):
+def make_fall_detection_cnn(layer_count, num_channels, dropout):
     """
     Constructs a 1D CNN for fall detection using privacy-compatible layers.
 
@@ -195,7 +197,7 @@ def make_cnn(layer_count, num_channels, dropout):
     )
     return model
 
-def evaluate_model(model, val_loader):
+def evaluate_fall_detection_model(model, val_loader):
     """
     Evaluates a trained CNN model on a validation or test dataset.
 
@@ -241,5 +243,102 @@ def evaluate_model(model, val_loader):
     precision = precision_score(y_true, y_pred)
     recall = recall_score(y_true, y_pred)
     f1 = f1_score(y_true, y_pred)
+
+    return acc, precision, recall, f1
+
+def make_identity_inference_cnn(layer_count, num_channels, dropout):
+    """
+    Base CNN model: Builds a 1D CNN model for identity classification using variable-depth architecture.
+
+    - The network begins with an initial Conv1D + BatchNorm + ReLU + MaxPool block.
+    - Additional convolutional blocks are added based on the specified layer_count.
+    - Each additional block doubles the number of channels and includes Conv1D + BatchNorm + ReLU.
+    - MaxPool1d is applied only in the first two additional blocks.
+    - The output is pooled, flattened, and passed through fully connected layers ending in a vector of class logits.
+
+    Args:
+        layer_count (int): Total number of convolutional blocks to include (minimum 3).
+        num_channels (int): Number of output channels for the first convolutional layer.
+        dropout (float): Dropout probability applied before the final output layer.
+
+    Returns:
+        nn.Sequential: A PyTorch Sequential model ready for training.
+    """
+    layers = []
+    input_channels = 9 # for 9 sensors
+    current_channels = num_channels
+
+    # Add the first conv block
+    layers.append(nn.Conv1d(input_channels, num_channels, kernel_size=5, padding=2))
+    layers.append(nn.BatchNorm1d(num_channels))
+    layers.append(nn.ReLU())
+    layers.append(nn.MaxPool1d(2))
+
+    for i in range(1, layer_count):
+        next_channels = current_channels * 2
+        layers.append(nn.Conv1d(current_channels, next_channels, kernel_size=3, padding=1))
+        layers.append(nn.BatchNorm1d(next_channels))
+        layers.append(nn.ReLU())
+
+        if i < 3:
+            layers.append(nn.MaxPool1d(2))
+        
+        current_channels = next_channels
+
+    layers.append(nn.AdaptiveAvgPool1d(1))
+
+    model = nn.Sequential(
+        *layers,
+        nn.Flatten(),
+        nn.Linear(current_channels, 128), 
+        nn.ReLU(),
+        nn.Dropout(dropout),
+        nn.Linear(128, NUM_CLASSES) # Output logits: one per participant class (0–37)
+    )
+    return model
+
+def evaluate_identity_inference_model(model, val_loader):
+    """
+    Evaluates a trained identity classifier on a validation or test dataset.
+
+    - Applies argmax to model output logits to select the most likely class.
+    - Computes multi-class classification metrics: accuracy, precision, recall, and F1 score.
+
+    Args:
+        model (nn.Module): Trained CNN model.
+        val_loader (DataLoader): DataLoader for validation or test data.
+
+    Returns:
+        tuple: (accuracy, precision, recall, f1)
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    model.eval()
+
+    correct = 0
+    total = 0
+    all_preds = []
+    all_targets = []
+
+    with torch.no_grad():
+        for X_batch, y_batch in val_loader:
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            X_batch = X_batch.permute(0, 2, 1)
+            output = model(X_batch)
+            preds = torch.argmax(output, dim=1) # Predicts most likely class by selecting index with highest logit
+
+            correct += (preds == y_batch.view(-1)).sum().item()
+            total += y_batch.size(0)
+
+            all_preds.append(preds.cpu())
+            all_targets.append(y_batch.cpu())
+
+    acc = correct / total
+    y_true = torch.cat(all_targets).numpy()
+    y_pred = torch.cat(all_preds).numpy()
+
+    precision = precision_score(y_true, y_pred, average="weighted")
+    recall = recall_score(y_true, y_pred, average="weighted")
+    f1 = f1_score(y_true, y_pred, average="weighted")
 
     return acc, precision, recall, f1
