@@ -15,7 +15,7 @@ import optuna
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from model.model_util import *
-from util.util import print_color_text_with_timestamp, print_color_text, print_with_timestamp, print_bold_text
+from util.util import print_color_text_with_timestamp, print_color_text, print_with_timestamp, bold_text
 
 # Initial number of trials completed when Optuna study is loaded
 initial_completed = 0
@@ -337,7 +337,7 @@ def objective(trial):
 
     # Log current trial hyperparameter details
     print('_____________________________________________________________')
-    print_color_text_with_timestamp(print_bold_text(f"\nTrial {trial.number}: Testing {layer_count}-layer CNN..."), "BRIGHT_MAGENTA")
+    print_color_text_with_timestamp(bold_text(f"\nTrial {trial.number}: Testing {layer_count}-layer CNN..."), "BRIGHT_MAGENTA")
     print(f"Learning Rate: {lr}")
     print(f"Batch Size: {batch_size}")
     print(f"Number of Channels: {num_channels}")
