@@ -50,6 +50,14 @@ IDENTITY_LABELS_FILE_NAME = "y_identity_labels.npy"
 IDENTITY_X_PATH = WINDOWS_DIR_PATH / IDENTITY_WINDOWS_FILE_NAME
 IDENTITY_Y_PATH = WINDOWS_DIR_PATH / IDENTITY_LABELS_FILE_NAME
 
+# Labels for FALL and IDENTITY windows TODO: Determine whether we can just keep this set of windows/labels file names/paths
+WINDOWS_FILE_NAME = "X_windows.npy" # DUPLICATE
+FALL_LABELS_FILE_NAME = "y_fall_labels.npy"
+IDENTITY_LABELS_FILE_NAME = "y_identity_labels.npy" # DUPLICATE
+X_PATH = WINDOWS_DIR_PATH / WINDOWS_FILE_NAME # DUPLICATE
+Y_FALL_PATH = WINDOWS_DIR_PATH / FALL_LABELS_FILE_NAME
+Y_IDENTITY_PATH = WINDOWS_DIR_PATH / IDENTITY_LABELS_FILE_NAME
+
 # Directory path for saved model files (best performing CNN weights)
 MODEL_DIR_PATH = PROJECT_ROOT / "model"
 # Directory path for Fall Detection binary classifer checkpoints
