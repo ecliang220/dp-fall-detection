@@ -51,6 +51,13 @@ def main():
              best_params["num_channels"], 
              best_params["dropout"]]
             )
+    
+    # Output FINAL best model performance metrics to CSV file
+    with open(BEST_IDENTITY_MODEL_METRICS_FILE_PATH, "w", newline="") as csvFile:
+        csvWriter = csv.writer(csvFile)
+        csvWriter.writerow(["accuracy", "precision", "recall", "f1"])
+        csvWriter.writerow([acc, precision, recall, f1])
+
 
 if __name__ == '__main__':
     set_seed() # Default to 42
