@@ -68,21 +68,20 @@ METRICS_DIR_PATH = PROJECT_ROOT / "results"
 FALL_METRICS_DIR_PATH = PROJECT_ROOT / "results"/ "fall"
 # File path for FALL classifier performance metrics
 BEST_FALL_MODEL_METRICS_FILE_PATH = FALL_METRICS_DIR_PATH / "best_fall_model_metrics.csv"
+# File path for best FALL model hyperparameters from Optuna tuning
+BEST_FALL_MODEL_HYPERPARAMS_FILE_PATH = FALL_METRICS_DIR_PATH / "best_fall_model_hyperparams.csv"
 
 # Directory for saving IDENTITY model evaluation metrics and Optuna optimization results
 IDENTITY_METRICS_DIR_PATH = PROJECT_ROOT / "results"/ "identity"
 # File path for IDENTITY classifier performance metrics
 BEST_IDENTITY_MODEL_METRICS_FILE_PATH = IDENTITY_METRICS_DIR_PATH / "best_identity_model_metrics.csv"
+# File path for best IDENTITY model hyperparameters from Optuna tuning
+BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH = IDENTITY_METRICS_DIR_PATH / "best_identity_model_hyperparams.csv"
 
 # Directory for model evaluation metrics on CLM-DP data
 CLM_DP_METRICS_DIR_PATH = METRICS_DIR_PATH / "clm_dp"
 # File path for CLM-DP evaluation metrics
 CLM_DP_EVAL_METRICS_FILE_PATH = CLM_DP_METRICS_DIR_PATH / "clm_dp_eval_metrics.csv"
-
-# File path for best FALL model hyperparameters from Optuna tuning
-BEST_FALL_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_fall_model_hyperparams.csv"
-# File path for best IDENTITY model hyperparameters from Optuna tuning
-BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_identity_model_hyperparams.csv"
 
 # --------------------------------------------------------------------
 # Fall Detection Classifier Optuna Config
