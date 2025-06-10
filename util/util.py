@@ -111,7 +111,7 @@ def color_timestamp_now():
     Returns:
         str: A string containing the formatted timestamp wrapped in color escape codes.
     """
-    return color_text_with_code(f"[{get_timestamp_now()}]", GREEN)
+    return color_text_with_code(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", GREEN)
 
 def print_with_timestamp(text):
     """

@@ -234,6 +234,9 @@ def main():
 
         append_to_log(LOG_FILE_PATH, epsilon, DECAY_FACTOR, JITTER_EPS, X.shape, clm_dp_output_dir_path)
 
+    print()
+    print_color_text_with_timestamp(f"Noise Injection Log saved to:", "RED")
+    print_color_text(LOG_FILE_PATH, "BLUE")
 
 if __name__ == '__main__':
     main()
