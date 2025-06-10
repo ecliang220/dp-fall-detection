@@ -37,12 +37,18 @@ NUM_CLASSES = 38 # Model will output 38 class scores
 # --------------------------------------------------------------------
 # Directory Path for Training Windows
 WINDOWS_DIR_PATH = PROJECT_ROOT / "data/windows"
-# Training model input file names
+# OG FALL detection model input file names
 WINDOWS_FILE_NAME = "X_windows.npy"
 LABELS_FILE_NAME = "y_labels.npy"
-# NO NOISE Training model input files: windowed IMU data and binary labels in .npy format
+# OG FALL detection model input file paths: windowed IMU data and binary labels in .npy format
 X_PATH = WINDOWS_DIR_PATH / WINDOWS_FILE_NAME
 Y_PATH = WINDOWS_DIR_PATH / LABELS_FILE_NAME
+# IDENTITY inference model input file names
+IDENTITY_WINDOWS_FILE_NAME = "X_identity_windows.npy"
+IDENTITY_LABELS_FILE_NAME = "y_identity_labels.npy"
+# IDENTITY inference model input file paths: windowed IMU data and multi-class (38) labels in .npy format
+IDENTITY_X_PATH = WINDOWS_DIR_PATH / IDENTITY_WINDOWS_FILE_NAME
+IDENTITY_Y_PATH = WINDOWS_DIR_PATH / IDENTITY_LABELS_FILE_NAME
 
 # Directory path for saved model files (best performing CNN weights)
 MODEL_DIR_PATH = PROJECT_ROOT / "model"

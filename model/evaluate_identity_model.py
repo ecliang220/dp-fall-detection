@@ -1,4 +1,4 @@
-
+import os
 import csv
 import sys
 from pathlib import Path
@@ -30,7 +30,7 @@ def main():
     best_model.load_state_dict(torch.load(BEST_IDENTITY_MODEL_FILE_PATH, weights_only=True))
 
     # Reload data with best batch size
-    _, val_loader = load_data(X_PATH, Y_PATH, best_params["batch_size"])
+    _, val_loader = load_data(IDENTITY_X_PATH, IDENTITY_Y_PATH, best_params["batch_size"])
 
     # Re-evaluate on validation data
     acc, precision, recall, f1 = evaluate_identity_inference_model(best_model, val_loader)
@@ -41,10 +41,12 @@ def main():
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")
 
-    with open(BEST_IDENTITY_MODEL_FILE_PATH, "w", newline="") as csvFile:
-        csvWriter = csv.writer(csvFile)
-        csvWriter.writerow(["layer_count", "learning_rate", "batch_size", "num_channels", "dropout"])
-        csvWriter.writerow(
+    print_with_timestamp(f"Saving hyperparams...")
+    print_color_text(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH)
+    with open(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH, "w", newline="") as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["layer_count", "learning_rate", "batch_size", "num_channels", "dropout"])
+        csv_writer.writerow(
             [best_params["layer_count"], 
              best_params["lr"], 
              best_params["batch_size"], 
@@ -52,11 +54,13 @@ def main():
              best_params["dropout"]]
             )
     
+    
+    os.makedirs(IDENTITY_METRICS_DIR_PATH, exist_ok=True)
     # Output FINAL best model performance metrics to CSV file
-    with open(BEST_IDENTITY_MODEL_METRICS_FILE_PATH, "w", newline="") as csvFile:
-        csvWriter = csv.writer(csvFile)
-        csvWriter.writerow(["accuracy", "precision", "recall", "f1"])
-        csvWriter.writerow([acc, precision, recall, f1])
+    with open(BEST_IDENTITY_MODEL_METRICS_FILE_PATH, "w", newline="") as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["accuracy", "precision", "recall", "f1"])
+        csv_writer.writerow([acc, precision, recall, f1])
 
 
 if __name__ == '__main__':
