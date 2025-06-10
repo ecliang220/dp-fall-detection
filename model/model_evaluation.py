@@ -51,7 +51,7 @@ BEST_FALL_MODEL_FILE_PATH = FALL_MODEL_DIR_PATH / "best_model.pt"
 # Directory path for Identity Inference multi-class classifer checkpoints
 IDENTITY_MODEL_DIR_PATH =  MODEL_DIR_PATH / "identity_checkpoints"
 # File path for trained best Identity model
-BEST_IDENTITY_MODEL_FILE_PATH = FALL_MODEL_DIR_PATH / "best_identity_model.pt"
+BEST_IDENTITY_MODEL_FILE_PATH = IDENTITY_MODEL_DIR_PATH / "best_identity_model.pt"
 
 # Directory for model evaluation metrics and Optuna optimization results
 METRICS_DIR_PATH = PROJECT_ROOT / "results"
