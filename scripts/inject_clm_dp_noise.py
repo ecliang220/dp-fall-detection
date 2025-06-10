@@ -213,14 +213,21 @@ def main():
     print_with_timestamp(f"Loaded {X.shape[0]} windows of shape {X.shape[1:]}.")
 
     for epsilon in EPSILON_VALS:
+        clm_dp_output_dir_path = WINDOWS_DIR_PATH / f"clm_dp_eps_{epsilon}"
+        windows_file_path = clm_dp_output_dir_path / WINDOWS_FILE_NAME
+        labels_file_path = clm_dp_output_dir_path / LABELS_FILE_NAME
+
+        if all(path.exists() for path in [clm_dp_output_dir_path, windows_file_path, labels_file_path]):
+            print_color_text_with_timestamp(f"⚠️Skipping ε = {epsilon}: files already exist at {clm_dp_output_dir_path}", "YELLOW")
+            continue
+
         L = precompute_cholesky_decomp(X.shape[1] * X.shape[2])
         X_noised = inject_noise_into_windows(X, epsilon, L)
 
-        clm_dp_output_dir_path = WINDOWS_DIR_PATH / f"clm_dp_eps_{epsilon}"
         os.makedirs(clm_dp_output_dir_path, exist_ok=True)
         X_noised_reshaped = X_noised.reshape(X.shape)  # Reshape back to (num_windows, 200, 9)
-        np.save(clm_dp_output_dir_path / WINDOWS_FILE_NAME, X_noised_reshaped)
-        np.save(clm_dp_output_dir_path / LABELS_FILE_NAME, y)    
+        np.save(windows_file_path, X_noised_reshaped)
+        np.save(labels_file_path, y)    
 
         print_color_text_with_timestamp(f"✅Saved {X_noised_reshaped.shape[0]} noised windows at ε = {epsilon} to:", "RED")
         print(clm_dp_output_dir_path)

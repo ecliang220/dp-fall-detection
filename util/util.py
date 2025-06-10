@@ -15,6 +15,7 @@ from datetime import datetime
 # --------------------------------------------------------------------
 RED = '\033[31m'
 GREEN = '\033[32m'
+YELLOW = '\033[33m'
 BLUE = '\033[34m'
 PURPLE = '\033[35m'
 BRIGHT_BLUE = '\033[94m'
@@ -27,6 +28,7 @@ RESET = '\033[0m'
 ANSI_COLOR_DICT = {
     "RED": RED,
     "GREEN": GREEN,
+    "YELLOW": YELLOW,
     "BLUE": BLUE,
     "PURPLE": PURPLE,
     'BRIGHT_BLUE': BRIGHT_BLUE,
@@ -41,6 +43,7 @@ def color_text(text, color):
     Available Colors:
         - "RED"
         - "GREEN"
+        - "YELLOW"
         - "BLUE"
         - "PURPLE"
         - "BRIGHT_BLUE"
