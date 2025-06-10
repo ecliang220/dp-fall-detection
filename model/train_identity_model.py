@@ -337,7 +337,7 @@ def objective(trial):
 
     # Log current trial hyperparameter details
     print('_____________________________________________________________')
-    print_color_text_with_timestamp(bold_text(f"\nTrial {trial.number}: Testing {layer_count}-layer CNN..."), "BRIGHT_MAGENTA")
+    print_color_text_with_timestamp(bold_text(f"Trial {trial.number}: Testing {layer_count}-layer CNN..."), "BRIGHT_MAGENTA")
     print(f"Learning Rate: {lr}")
     print(f"Batch Size: {batch_size}")
     print(f"Number of Channels: {num_channels}")
