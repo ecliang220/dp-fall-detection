@@ -17,6 +17,7 @@ Outputs:
 Author: Ellie Liang
 Date: 2025-06-05
 """
+import csv
 import sys
 import os
 from pathlib import Path
@@ -25,7 +26,7 @@ from tqdm import tqdm
 
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from util.util import print_with_timestamp
+from util.util import print_with_timestamp, print_color_text_with_timestamp, get_timestamp_now
 
 # --------------------------------------------------------------------
 # Environment Config
@@ -42,7 +43,9 @@ PROJECT_ROOT = COLAB_ROOT if IS_COLAB else LOCAL_ROOT
 # --------------------------------------------------------------------
 # Experiment: CLM Differential Privacy Config
 # --------------------------------------------------------------------
-EPSILON = 1.0
+# Epsilon values to test (weakest to strongest)
+EPSILON_VALS = [8.0, 4.0, 2.0, 1.0, 0.5]
+# Controls strength of temporal correlation; higher = stronger correlation across time steps (0 < decay < 1)
 DECAY_FACTOR = 0.95
 # Numerical jitter added to the diagonal to ensure positive-definiteness
 JITTER_EPS = 1e-6
@@ -52,14 +55,20 @@ JITTER_EPS = 1e-6
 # --------------------------------------------------------------------
 # Directory Path for Training Windows
 WINDOWS_DIR_PATH = PROJECT_ROOT / "data/windows"
-# Directory Path for Training Windows with CLM Differential Privacy
-CLM_DP_OUTPUT_DIR_PATH = WINDOWS_DIR_PATH / f"clm_dp_eps_{EPSILON}"
+
 # Training model input file names
 WINDOWS_FILE_NAME = "X_windows.npy"
 LABELS_FILE_NAME = "y_labels.npy"
+
 # Training model input files: windowed IMU data and binary labels in .npy format
 X_PATH = WINDOWS_DIR_PATH / WINDOWS_FILE_NAME
 Y_PATH = WINDOWS_DIR_PATH / LABELS_FILE_NAME
+
+# Directory Path for Output Logs
+LOGS_DIR_PATH = PROJECT_ROOT / "logs"
+
+# File Path for Log of Windows with Noise Injection Completed
+LOG_FILE_PATH = LOGS_DIR_PATH / "noise_injection_log.csv"
 
 def flatten_windows_to_1d(X_windows):
     """
@@ -100,24 +109,83 @@ def sample_correlated_laplace_noise(L, epsilon):
     # Step 3: Apply Gaussian trick and scale for ε
     return (z / np.sqrt(v)) / epsilon
 
-def inject_noise_into_windows(windows):
+def inject_noise_into_windows(windows, epsilon, L):
+    """
+    Injects temporally correlated Laplace noise into flattened IMU windows.
+
+    Args:
+        windows (np.ndarray): Original IMU windows of shape (n, 200, 9).
+        epsilon (float): Privacy budget for differential privacy.
+        L (np.ndarray): Cholesky decomposition of the correlation matrix.
+
+    Returns:
+        np.ndarray: Noised IMU windows of shape (n, 1800).
+    """
     X_flat = flatten_windows_to_1d(windows)  # shape: (num_windows, 1800)
 
     X_noised = np.zeros_like(X_flat)
 
-    # Precompute Cholesky decomposition of exponential decay covariance matrix
-    indices = np.arange(X_flat.shape[1])
-    corr_matrix = np.power(DECAY_FACTOR, np.abs(indices[:, None] - indices[None, :]))
-    L = np.linalg.cholesky(corr_matrix + JITTER_EPS * np.eye(X_flat.shape[1]))
-
-    print_with_timestamp(f"Injecting CLM DP noise at ε = {EPSILON} into windows...")
+    print_with_timestamp(f"Injecting CLM DP noise at ε = {epsilon} into windows...")
     
     for i in tqdm(range(X_flat.shape[0]), desc="Injecting noise", unit="window"): # Use progress bar
         # Inject CLM noise into each window
-        noise = sample_correlated_laplace_noise(L, epsilon=EPSILON)
+        noise = sample_correlated_laplace_noise(L, epsilon=epsilon)
         X_noised[i] = X_flat[i] + noise
     
     return X_noised
+
+def precompute_cholesky_decomp(size):
+    """
+    Constructs and decomposes the exponential decay covariance matrix.
+
+    Args:
+        size (int): Dimensionality of the flattened window (e.g., 1800).
+
+    Returns:
+        np.ndarray: Lower triangular matrix from Cholesky decomposition.
+    """
+    # Precompute Cholesky decomposition of exponential decay covariance matrix
+    indices = np.arange(size)
+    corr_matrix = np.power(DECAY_FACTOR, np.abs(indices[:, None] - indices[None, :]))
+
+    return np.linalg.cholesky(corr_matrix + JITTER_EPS * np.eye(size))
+
+def append_to_log(log_path, epsilon, decay_factor, jitter_eps, X_shape, output_dir):
+    """
+    Appends metadata about the CLM-DP noise injection to a CSV log file.
+
+    Args:
+        log_path (str or Path): Path to the CSV log file.
+        epsilon (float): Privacy budget used.
+        decay_factor (float): Correlation decay factor for the covariance matrix.
+        jitter_eps (float): Jitter added to ensure positive-definiteness.
+        X_shape (tuple): Shape of the IMU input array (num_windows, window_len, num_features).
+        output_dir (Path): Directory where the noised output was saved.
+    """
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    timestamp_now = get_timestamp_now()
+    log_exists = os.path.isfile(log_path)
+
+    with open(log_path, 'a', newline="") as csv_file:
+        writer = csv.writer(csv_file)
+        if not log_exists:
+            writer.writerow([
+                "epsilon", "decay_factor", 
+                "jitter_eps", "num_windows", 
+                "window_shape", "flattened_dim", 
+                "output_dir", "timestamp"
+            ])
+        
+        writer.writerow([
+            epsilon, 
+            decay_factor, 
+            jitter_eps, 
+            X_shape[0],                         # num_windows
+            f"({X_shape[1]}, {X_shape[2]})",    # window_shape
+            X_shape[1] * X_shape[2],            # flattened_dim
+            str(output_dir), 
+            timestamp_now
+        ])
 
 def main():
     """
@@ -135,22 +203,29 @@ def main():
         Saves noised windows and unchanged labels in a subdirectory of `data/windows`:
             - data/windows/clm_dp_eps_{ε}/X_windows.npy
             - data/windows/clm_dp_eps_{ε}/y_labels.npy
+        Saves metadata values for noise injection at each epsilon value to log:
+            - logs/noise_injection_log.csv
     """
 
     print_with_timestamp("Loading Cleaned IMU Windows and Labels...")
     X = np.load(X_PATH)
     y = np.load(Y_PATH)
-    print_with_timestamp(f"Loaded {X.shape[0]} windows of shape {X.shape[1:]}...")
-    
-    os.makedirs(CLM_DP_OUTPUT_DIR_PATH, exist_ok=True)
+    print_with_timestamp(f"Loaded {X.shape[0]} windows of shape {X.shape[1:]}.")
 
-    X_noised = inject_noise_into_windows(X)
+    for epsilon in EPSILON_VALS:
+        L = precompute_cholesky_decomp(X.shape[1] * X.shape[2])
+        X_noised = inject_noise_into_windows(X, epsilon, L)
 
-    X_noised_reshaped = X_noised.reshape(X.shape)  # Reshape back to (num_windows, 200, 9)
-    np.save(CLM_DP_OUTPUT_DIR_PATH / WINDOWS_FILE_NAME, X_noised_reshaped)
-    np.save(CLM_DP_OUTPUT_DIR_PATH / LABELS_FILE_NAME, y)    
+        clm_dp_output_dir_path = WINDOWS_DIR_PATH / f"clm_dp_eps_{epsilon}"
+        os.makedirs(clm_dp_output_dir_path, exist_ok=True)
+        X_noised_reshaped = X_noised.reshape(X.shape)  # Reshape back to (num_windows, 200, 9)
+        np.save(clm_dp_output_dir_path / WINDOWS_FILE_NAME, X_noised_reshaped)
+        np.save(clm_dp_output_dir_path / LABELS_FILE_NAME, y)    
 
-    print_with_timestamp(f"✅ Saved {X_noised_reshaped.shape[0]} noised windows to: {CLM_DP_OUTPUT_DIR_PATH}")
+        print_color_text_with_timestamp(f"✅Saved {X_noised_reshaped.shape[0]} noised windows at ε = {epsilon} to:", "RED")
+        print(clm_dp_output_dir_path)
+
+        append_to_log(LOG_FILE_PATH, epsilon, DECAY_FACTOR, JITTER_EPS, X.shape, clm_dp_output_dir_path)
 
 
 if __name__ == '__main__':
