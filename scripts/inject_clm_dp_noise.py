@@ -220,7 +220,7 @@ def main():
         labels_file_path = clm_dp_output_dir_path / LABELS_FILE_NAME
 
         if SKIP_EXISTING and all(path.exists() for path in [clm_dp_output_dir_path, windows_file_path, labels_file_path]):
-            print_color_text_with_timestamp(f"⚠️Skipping {bold_text(f"ε = {epsilon}")}: files already exist at {clm_dp_output_dir_path}", "YELLOW")
+            print_color_text_with_timestamp(f"⚠️Skipping {bold_text(f'ε = {epsilon}')}: files already exist at {clm_dp_output_dir_path}", "YELLOW")
             continue
 
         L = precompute_cholesky_decomp(X.shape[1] * X.shape[2])
