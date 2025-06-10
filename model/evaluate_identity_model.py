@@ -8,7 +8,7 @@ import torch
 
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from model_evaluation import *
+from model.model_util import *
 from util.util import print_with_timestamp, print_color_text_with_timestamp, print_color_text
 
 def main():
@@ -30,7 +30,7 @@ def main():
     best_model.load_state_dict(torch.load(BEST_IDENTITY_MODEL_FILE_PATH, weights_only=True))
 
     # Reload data with best batch size
-    _, val_loader = load_data(IDENTITY_X_PATH, IDENTITY_Y_PATH, best_params["batch_size"])
+    _, val_loader = load_data(X_PATH, Y_IDENTITY_PATH, best_params["batch_size"])
 
     # Re-evaluate on validation data
     acc, precision, recall, f1 = evaluate_identity_inference_model(best_model, val_loader)
@@ -41,7 +41,7 @@ def main():
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")
 
-    print_with_timestamp(f"Saving hyperparams...")
+    print_with_timestamp(f"Saving best hyperparams...")
     print_color_text(str(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH), "BLUE")
     with open(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH, "w", newline="") as csv_file:
         csv_writer = csv.writer(csv_file)
@@ -57,7 +57,7 @@ def main():
     
     os.makedirs(IDENTITY_METRICS_DIR_PATH, exist_ok=True)
 
-    print_with_timestamp(f"Saving performance metrics...")
+    print_with_timestamp(f"Saving best performance metrics...")
     print_color_text(str(BEST_IDENTITY_MODEL_METRICS_FILE_PATH), "BLUE")
     # Output FINAL best model performance metrics to CSV file
     with open(BEST_IDENTITY_MODEL_METRICS_FILE_PATH, "w", newline="") as csv_file:

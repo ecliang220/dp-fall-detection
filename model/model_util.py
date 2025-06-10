@@ -41,24 +41,12 @@ NUM_CLASSES = 38 # Model will output 38 class scores
 # --------------------------------------------------------------------
 # Directory Path for Training Windows
 WINDOWS_DIR_PATH = PROJECT_ROOT / "data/windows"
-# OG FALL detection model input file names
-WINDOWS_FILE_NAME = "X_windows.npy"
-LABELS_FILE_NAME = "y_labels.npy"
-# OG FALL detection model input file paths: windowed IMU data and binary labels in .npy format
-X_PATH = WINDOWS_DIR_PATH / WINDOWS_FILE_NAME
-Y_PATH = WINDOWS_DIR_PATH / LABELS_FILE_NAME
-# IDENTITY inference model input file names
-IDENTITY_WINDOWS_FILE_NAME = "X_identity_windows.npy"
-IDENTITY_LABELS_FILE_NAME = "y_identity_labels.npy"
-# IDENTITY inference model input file paths: windowed IMU data and multi-class (38) labels in .npy format
-IDENTITY_X_PATH = WINDOWS_DIR_PATH / IDENTITY_WINDOWS_FILE_NAME
-IDENTITY_Y_PATH = WINDOWS_DIR_PATH / IDENTITY_LABELS_FILE_NAME
 
 # Labels for FALL and IDENTITY windows TODO: Determine whether we can just keep this set of windows/labels file names/paths
-WINDOWS_FILE_NAME = "X_windows.npy" # DUPLICATE
+WINDOWS_FILE_NAME = "X_windows.npy"
 FALL_LABELS_FILE_NAME = "y_fall_labels.npy"
-IDENTITY_LABELS_FILE_NAME = "y_identity_labels.npy" # DUPLICATE
-X_PATH = WINDOWS_DIR_PATH / WINDOWS_FILE_NAME # DUPLICATE
+IDENTITY_LABELS_FILE_NAME = "y_identity_labels.npy"
+X_PATH = WINDOWS_DIR_PATH / WINDOWS_FILE_NAME
 Y_FALL_PATH = WINDOWS_DIR_PATH / FALL_LABELS_FILE_NAME
 Y_IDENTITY_PATH = WINDOWS_DIR_PATH / IDENTITY_LABELS_FILE_NAME
 
@@ -118,7 +106,18 @@ OPTUNA_FALL_LAYERS_MAX = 5
 # Identity Inference Classifier Optuna Config
 # --------------------------------------------------------------------
 OPTUNA_IDENTITY_STORAGE_PATH = f"sqlite:///{str(Path(PROJECT_ROOT) / 'storage' / 'optuna_identity_inference.db')}"
+OPTUNA_IDENTITY_RESULTS_FILE_PATH = METRICS_DIR_PATH / "optuna_identity_results.csv"
 OPTUNA_IDENTITY_STUDY_NAME = "CNN_identity_classification_optimization"
+OPTUNA_IDENTITY_N_TRIALS = 30 # more trials to run
+OPTUNA_IDENTITY_LR_MIN = 1e-4
+OPTUNA_IDENTITY_LR_MAX = 1e-2
+OPTUNA_IDENTITY_DROPOUT_MIN = 0.3
+OPTUNA_IDENTITY_DROPOUT_MAX = 0.6
+OPTUNA_IDENTITY_BATCH_SIZE_VALS = [16, 32, 64, 128]
+OPTUNA_IDENTITY_NUM_CHANNELS_VALS = [64, 128, 256]
+# OPTUNA_IDENTITY_NUM_CHANNELS_VALS = [64, 128, 256, 512]
+OPTUNA_IDENTITY_LAYERS_MIN = 3
+OPTUNA_IDENTITY_LAYERS_MAX = 6
 
 def set_seed(seed=RANDOM_SEED):
     """

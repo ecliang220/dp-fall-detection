@@ -13,13 +13,22 @@ from datetime import datetime
 # --------------------------------------------------------------------
 # ANSI Style Codes for Terminal Output Text Adjustments
 # --------------------------------------------------------------------
+BLACK = '\033[30m'
 RED = '\033[31m'
 GREEN = '\033[32m'
 YELLOW = '\033[33m'
 BLUE = '\033[34m'
-PURPLE = '\033[35m'
+PURPLE = '\033[35m' # MAGENTA
+CYAN = '\033[36m'
+WHITE = '\033[37m'
+BRIGHT_BLACK = '\033[90m'
+BRIGHT_RED = '\033[91m'
+BRIGHT_GREEN = '\033[92m'
+BRIGHT_YELLOW = '\033[93m'
 BRIGHT_BLUE = '\033[94m'
 BRIGHT_MAGENTA = '\033[95m'
+BRIGHT_CYAN = '\033[96m'
+BRIGHT_WHITE = '\033[97m'
 BOLD = '\033[1m'
 RESET = '\033[0m'
 
@@ -32,8 +41,17 @@ ANSI_COLOR_DICT = {
     "YELLOW": YELLOW,
     "BLUE": BLUE,
     "PURPLE": PURPLE,
-    'BRIGHT_BLUE': BRIGHT_BLUE,
+    "CYAN": CYAN,
+    "WHITE": WHITE,
+    "BRIGHT_BLACK": BRIGHT_BLACK,
+    "BRIGHT_RED": BRIGHT_RED,
+    "BRIGHT_GREEN": BRIGHT_GREEN,
+    "BRIGHT_YELLOW": BRIGHT_YELLOW,
+    "BRIGHT_BLUE": BRIGHT_BLUE,
     "BRIGHT_MAGENTA": BRIGHT_MAGENTA,
+    "BRIGHT_CYAN": BRIGHT_CYAN,
+    "BRIGHT_WHITE": BRIGHT_WHITE,
+    "BOLD": BOLD,
     "RESET": RESET
 }
 
@@ -64,6 +82,16 @@ def color_text(text, color):
         - "PURPLE"
         - "BRIGHT_BLUE"
         - "BRIGHT_MAGENTA"
+        - "CYAN"
+        - "WHITE"
+        - "BRIGHT_BLACK"
+        - "BRIGHT_RED"
+        - "BRIGHT_GREEN"
+        - "BRIGHT_YELLOW"
+        - "BRIGHT_CYAN"
+        - "BRIGHT_WHITE"
+        - "BOLD"
+        - "RESET"
 
     Args:
         text (str): The text to be colored.
@@ -130,6 +158,25 @@ def print_color_text_with_timestamp(text, color):
     """
     Prints the given text wrapped in the given color with a leading timestamp ('[YYYY-MM-DD HH:MM:SS]') 
     wrapped in green color for terminal output of the current date and time. 
+    
+    Available Colors:
+        - "RED"
+        - "GREEN"
+        - "YELLOW"
+        - "BLUE"
+        - "PURPLE"
+        - "BRIGHT_BLUE"
+        - "BRIGHT_MAGENTA"
+        - "CYAN"
+        - "WHITE"
+        - "BRIGHT_BLACK"
+        - "BRIGHT_RED"
+        - "BRIGHT_GREEN"
+        - "BRIGHT_YELLOW"
+        - "BRIGHT_CYAN"
+        - "BRIGHT_WHITE"
+        - "BOLD"
+        - "RESET"
 
     Args:
         text (str): The text to print with timestamp in terminal.
@@ -155,6 +202,16 @@ def print_color_text(text, color):
         - "PURPLE"
         - "BRIGHT_BLUE"
         - "BRIGHT_MAGENTA"
+        - "CYAN"
+        - "WHITE"
+        - "BRIGHT_BLACK"
+        - "BRIGHT_RED"
+        - "BRIGHT_GREEN"
+        - "BRIGHT_YELLOW"
+        - "BRIGHT_CYAN"
+        - "BRIGHT_WHITE"
+        - "BOLD"
+        - "RESET"
 
     Args:
         text (str): The text to be printed with the specified color in the terminal.

@@ -178,7 +178,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
             Otherwise, returns only the best F1 score achieved.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Fall back to CPU when no GPU
-    print("🚀 Device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU detected")
+    # print("🚀 Device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU detected")
     print("Using device:", device)
 
     model.to(device)

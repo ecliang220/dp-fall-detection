@@ -12,66 +12,10 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 from pathlib import Path
 import optuna
 
-# Detect if running in Google Colab
-IS_COLAB = "google.colab" in sys.modules
-
-# Root project path for Google Colab
-COLAB_ROOT = "/content/drive/MyDrive/Summer2025/CSC499/dp-fall-detection"
-
-# Root project path for local machine (one level up from this script)
-LOCAL_ROOT = Path(__file__).resolve().parents[1]
-
-# Dynamically resolve project root based on environment 
-PROJECT_ROOT = COLAB_ROOT if IS_COLAB else LOCAL_ROOT
-
-# Training model input files: sliding windows and labels as NumPy arrays in compressed binary format (.npy)
-X_PATH = PROJECT_ROOT / "data/windows/X_identity_windows.npy"
-Y_PATH = PROJECT_ROOT / "data/windows/y_identity_labels.npy"
-
-# Directory for saving model checkpoint files (best performing CNN weights)
-MODEL_DIR_PATH = PROJECT_ROOT / "model" / "identity_checkpoints"
-
-# File path for trained best model
-BEST_MODEL_FILE_PATH = MODEL_DIR_PATH / "best_identity_model.pt"
-
-# Directory for saving model evaluation metrics and Optuna optimization results
-METRICS_DIR_PATH = PROJECT_ROOT / "results"/ "identity"
-# File path for identity classifier performance metrics
-BEST_MODEL_METRICS_FILE_PATH = METRICS_DIR_PATH / "best_identity_model_metrics.csv"
-
-# File path for multi-class identity inference classifier hyperparameters
-BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_model_hyperparams.csv"
-
-# Random seed for reproducibility across dataset splits, model initialization, and Optuna trials
-RANDOM_SEED = 42
-
-# Number of epochs to train the CNN model during each trial
-NUM_EPOCHS = 30
-
-# Number of epochs to wait without F1 improvement before stopping early
-EARLY_STOPPING_PATIENCE = 5
-
-# Number of classes for training identity inference classifier
-NUM_CLASSES = 38 # Model will output 38 class scores
-
-"""
-Optuna Config
-"""
-OPTUNA_STORAGE_DIR_PATH = PROJECT_ROOT / "storage"
-OPTUNA_STORAGE_PATH = f"sqlite:///{str(Path(PROJECT_ROOT) / 'storage' / 'optuna_identity_inference.db')}"
-OPTUNA_RESULTS_FILE_PATH = METRICS_DIR_PATH / "optuna_identity_results.csv"
-
-OPTUNA_STUDY_NAME = "CNN_identity_classification_optimization"
-OPTUNA_N_TRIALS = 30 # more trials to run
-OPTUNA_LR_MIN = 1e-4
-OPTUNA_LR_MAX = 1e-2
-OPTUNA_DROPOUT_MIN = 0.3
-OPTUNA_DROPOUT_MAX = 0.6
-OPTUNA_BATCH_SIZE_VALS = [16, 32, 64, 128]
-OPTUNA_NUM_CHANNELS_VALS = [64, 128, 256]
-# OPTUNA_NUM_CHANNELS_VALS = [64, 128, 256, 512]
-OPTUNA_LAYERS_MIN = 3
-OPTUNA_LAYERS_MAX = 6
+# Add project root to sys.path so `util` functions can be found
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from model.model_util import *
+from util.util import print_color_text_with_timestamp, print_color_text, print_with_timestamp, print_bold_text
 
 # Initial number of trials completed when Optuna study is loaded
 initial_completed = 0
@@ -216,7 +160,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
             Otherwise, returns only the best F1 score achieved.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Fall back to CPU when no GPU
-    print("🚀 Device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU detected")
+    # print("🚀 Device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU detected")
     print("Using device:", device)
 
     model.to(device)
@@ -289,7 +233,10 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         avg_train_loss = train_loss / len(train_loader)
         avg_val_loss = val_loss / len(val_loader)
 
-        print(f"Epoch {epoch+1}: Training Loss = {avg_train_loss:.4f}, Validation Loss = {avg_val_loss:.4f}, Accuracy = {acc:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, F1 = {f1:.4f}")
+        print_color_text_with_timestamp(
+            f"Epoch {epoch+1}: Training Loss = {avg_train_loss:.4f}, Validation Loss = {avg_val_loss:.4f}, Accuracy = {acc:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, F1 = {f1:.4f}",
+            "BLUE"
+        )
 
         # Update scheduler based on validation F1 score
         scheduler.step(f1)
@@ -379,26 +326,26 @@ def objective(trial):
     global initial_completed
 
     # Hyperparameters to explore
-    lr = trial.suggest_float("lr", OPTUNA_LR_MIN, OPTUNA_LR_MAX, log=True)
-    dropout = trial.suggest_float("dropout", OPTUNA_DROPOUT_MIN, OPTUNA_DROPOUT_MAX)
-    batch_size = trial.suggest_categorical("batch_size", OPTUNA_BATCH_SIZE_VALS)
-    num_channels = trial.suggest_categorical("num_channels", OPTUNA_NUM_CHANNELS_VALS)
-    layer_count = trial.suggest_int("layer_count", OPTUNA_LAYERS_MIN, OPTUNA_LAYERS_MAX)
+    lr = trial.suggest_float("lr", OPTUNA_IDENTITY_LR_MIN, OPTUNA_IDENTITY_LR_MAX, log=True)
+    dropout = trial.suggest_float("dropout", OPTUNA_IDENTITY_DROPOUT_MIN, OPTUNA_IDENTITY_DROPOUT_MAX)
+    batch_size = trial.suggest_categorical("batch_size", OPTUNA_IDENTITY_BATCH_SIZE_VALS)
+    num_channels = trial.suggest_categorical("num_channels", OPTUNA_IDENTITY_NUM_CHANNELS_VALS)
+    layer_count = trial.suggest_int("layer_count", OPTUNA_IDENTITY_LAYERS_MIN, OPTUNA_IDENTITY_LAYERS_MAX)
 
     # Calculate how many trials are left in this training run
-    trials_left = OPTUNA_N_TRIALS - (trial.number - initial_completed)
+    trials_left = OPTUNA_IDENTITY_N_TRIALS - (trial.number - initial_completed)
 
     # Log current trial hyperparameter details
     print('_____________________________________________________________')
-    print(f"\nTrial {trial.number}: Testing {layer_count}-layer CNN...")
+    print_color_text_with_timestamp(print_bold_text(f"\nTrial {trial.number}: Testing {layer_count}-layer CNN..."), "BRIGHT_MAGENTA")
     print(f"Learning Rate: {lr}")
     print(f"Batch Size: {batch_size}")
     print(f"Number of Channels: {num_channels}")
     print(f"Dropout: {dropout}")
-    print(f"{trials_left}/{OPTUNA_N_TRIALS} remaining...\n")
+    print(f"{trials_left}/{OPTUNA_IDENTITY_N_TRIALS} remaining...\n")
 
     # Load data and train
-    train_loader, val_loader = load_data(X_PATH, Y_PATH, batch_size)
+    train_loader, val_loader = load_data(X_PATH, Y_IDENTITY_PATH, batch_size)
     model = make_cnn(layer_count, num_channels, dropout)
     val_loss, acc, precision, recall, f1, model_state = train_model(model, train_loader, val_loader, lr)
 
@@ -407,9 +354,9 @@ def objective(trial):
     trial.set_user_attr("recall", recall)
     trial.set_user_attr("val_loss", val_loss)
 
-    write_headers = not os.path.exists(OPTUNA_RESULTS_FILE_PATH)
+    write_headers = not os.path.exists(OPTUNA_IDENTITY_RESULTS_FILE_PATH)
 
-    with open(OPTUNA_RESULTS_FILE_PATH, mode="a", newline="") as file:
+    with open(OPTUNA_IDENTITY_RESULTS_FILE_PATH, mode="a", newline="") as file:
         writer = csv.writer(file)
         if write_headers:
             writer.writerow([
@@ -422,11 +369,11 @@ def objective(trial):
         ])
 
     if model_state:
-        os.makedirs(MODEL_DIR_PATH, exist_ok=True)
-        torch.save(model_state, MODEL_DIR_PATH  / f"model-t{trial.number}-lc{layer_count}-f1{f1:.3f}.pt")
+        os.makedirs(IDENTITY_MODEL_DIR_PATH, exist_ok=True)
+        torch.save(model_state, IDENTITY_MODEL_DIR_PATH  / f"model-t{trial.number}-lc{layer_count}-f1{f1:.3f}.pt")
 
         if f1 > objective.best_f1:
-            torch.save(model_state, BEST_MODEL_FILE_PATH)
+            torch.save(model_state, BEST_IDENTITY_MODEL_FILE_PATH)
             objective.best_f1 = f1
 
     return f1  # Maximizing F1 score
@@ -448,20 +395,20 @@ def main():
     # === Testing Hyperparameter Combinations to Optimize Model Performance  ===
     objective.best_f1 = 0.0 # Tracking best overall model
 
-    os.makedirs(METRICS_DIR_PATH, exist_ok=True)
+    os.makedirs(IDENTITY_METRICS_DIR_PATH, exist_ok=True)
     os.makedirs(OPTUNA_STORAGE_DIR_PATH, exist_ok=True)
-    # if os.path.exists(OPTUNA_RESULTS_FILE_PATH): os.remove(OPTUNA_RESULTS_FILE_PATH)
+    # if os.path.exists(OPTUNA_IDENTITY_RESULTS_FILE_PATH): os.remove(OPTUNA_IDENTITY_RESULTS_FILE_PATH)
 
     study = optuna.create_study(
-                        study_name=OPTUNA_STUDY_NAME,
+                        study_name=OPTUNA_IDENTITY_STUDY_NAME,
                         direction="maximize",
-                        storage=OPTUNA_STORAGE_PATH,
+                        storage=OPTUNA_IDENTITY_STORAGE_PATH,
                         load_if_exists=True # Resume progress if exists
                     )
     
     initial_completed = len(study.trials)
 
-    study.optimize(objective, n_trials=OPTUNA_N_TRIALS)
+    study.optimize(objective, n_trials=OPTUNA_IDENTITY_N_TRIALS)
 
     print("Number of finished trials:", len(study.trials))
     print("\nBest trial:")
@@ -471,7 +418,7 @@ def main():
     print(f"Best F1 Score: {study.best_trial.value:.4f}")
 
     # === Best Model Evaluation ===
-    print("\nEvaluating best model with best trial parameters...")
+    print_color_text_with_timestamp("\nEvaluating best model with best trial parameters...", "BRIGHT_MAGENTA")
 
     best_params = study.best_trial.params
     best_model = make_cnn(
@@ -479,20 +426,23 @@ def main():
         num_channels=best_params["num_channels"],
         dropout=best_params["dropout"]
     )
-    best_model.load_state_dict(torch.load(BEST_MODEL_FILE_PATH))
+    best_model.load_state_dict(torch.load(BEST_IDENTITY_MODEL_FILE_PATH))
 
     # Reload data with best batch size
-    _, val_loader = load_data(X_PATH, Y_PATH, best_params["batch_size"])
+    _, val_loader = load_data(X_PATH, Y_IDENTITY_PATH, best_params["batch_size"])
 
     # Re-evaluate on validation data
     acc, precision, recall, f1 = evaluate_model(best_model, val_loader)
 
-    print("\nFinal Evaluation of Best Model:")
+    print_color_text_with_timestamp("\nFinal Evaluation of Best Model:", "BRIGHT_MAGENTA")
     print(f"Accuracy: {acc:.4f}")
     print(f"Precision: {precision:.4f}")
     print(f"Recall: {recall:.4f}")
-    print(f"F1 Score: {f1:.4f}")
+    print_color_text(f"F1 Score: {f1:.4f}", "RED")
 
+    print()
+    print_with_timestamp(f"Saving best hyperparams...")
+    print_color_text(str(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH), "BLUE")
     with open(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH, "w", newline="") as csvFile:
         csvWriter = csv.writer(csvFile)
         csvWriter.writerow(["layer_count", "learning_rate", "batch_size", "num_channels", "dropout"])
@@ -504,8 +454,10 @@ def main():
              best_params["dropout"]]
             )
 
+    print_with_timestamp(f"Saving best performance metrics...")
+    print_color_text(str(BEST_IDENTITY_MODEL_METRICS_FILE_PATH), "BLUE")
     # Output FINAL best model performance metrics to CSV file
-    with open(BEST_MODEL_METRICS_FILE_PATH, "w", newline="") as csvFile:
+    with open(BEST_IDENTITY_MODEL_METRICS_FILE_PATH, "w", newline="") as csvFile:
         csvWriter = csv.writer(csvFile)
         csvWriter.writerow(["accuracy", "precision", "recall", "f1"])
         csvWriter.writerow([acc, precision, recall, f1])
