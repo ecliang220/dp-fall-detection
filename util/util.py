@@ -9,13 +9,6 @@ Date: 2025-06-09
 """
 
 from datetime import datetime
-import random
-
-import numpy as np
-import torch
-
-# Random seed for reproducibility
-RANDOM_SEED = 42
 
 # --------------------------------------------------------------------
 # ANSI Style Codes for Terminal Output Text Adjustments
@@ -186,16 +179,3 @@ def print_bold_text(text):
         None
     """
     print(bold_text(text))
-
-def set_seed(seed=RANDOM_SEED):
-    """
-    Sets random seeds for reproducibility across random, numpy, and torch.
-
-    Args:
-        seed (int): The seed value to use. Default is 42.
-    """
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
