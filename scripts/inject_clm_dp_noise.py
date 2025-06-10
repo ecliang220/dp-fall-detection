@@ -44,17 +44,22 @@ PROJECT_ROOT = COLAB_ROOT if IS_COLAB else LOCAL_ROOT
 # --------------------------------------------------------------------
 EPSILON = 1.0
 DECAY_FACTOR = 0.95
+# Numerical jitter added to the diagonal to ensure positive-definiteness
+JITTER_EPS = 1e-6
 
 # --------------------------------------------------------------------
 # Directory and File Paths
 # --------------------------------------------------------------------
 # Directory Path for Training Windows
 WINDOWS_DIR_PATH = PROJECT_ROOT / "data/windows"
-# Base Directory Name for Training Windows with CLM Differential Privacy
-CLM_DP_BASE_DIR_NAME = "clm_dp_eps"
+# Directory Path for Training Windows with CLM Differential Privacy
+CLM_DP_OUTPUT_DIR_PATH = WINDOWS_DIR_PATH / f"clm_dp_eps_{EPSILON}"
+# Training model input file names
+WINDOWS_FILE_NAME = "X_windows.npy"
+LABELS_FILE_NAME = "y_labels.npy"
 # Training model input files: windowed IMU data and binary labels in .npy format
-X_PATH = WINDOWS_DIR_PATH / "X_windows.npy"
-Y_PATH = WINDOWS_DIR_PATH / "y_labels.npy"
+X_PATH = WINDOWS_DIR_PATH / WINDOWS_FILE_NAME
+Y_PATH = WINDOWS_DIR_PATH / LABELS_FILE_NAME
 
 def flatten_windows_to_1d(X_windows):
     """
@@ -70,7 +75,7 @@ def flatten_windows_to_1d(X_windows):
     """
     return X_windows.reshape(X_windows.shape[0], -1)
 
-def sample_correlated_laplace_noise(size, epsilon, decay_factor=0.9):
+def sample_correlated_laplace_noise(L, epsilon):
     """
     Generates temporally correlated multivariate Laplace noise using the Gaussian trick.
 
@@ -80,23 +85,39 @@ def sample_correlated_laplace_noise(size, epsilon, decay_factor=0.9):
         3. Return z / sqrt(v), scaled by 1/ε to enforce the specified privacy budget
 
     Args:
-        size (int): Dimensionality of the flattened IMU window (e.g., 200 × 9 = 1800)
+        L (np.ndarray): Cholesky decomposition of the covariance matrix Σ.
         epsilon (float): Privacy budget (larger ε = less noise)
-        decay_factor (float): Temporal autocorrelation factor (0 < decay < 1)
 
     Returns:
         np.ndarray: 1D array of correlated Laplace noise.
     """
     # Step 1: Sample z ~ N(0, Σ) with temporal correlation
-    indices = np.arange(size)
-    corr_matrix = np.power(decay_factor, np.abs(indices[:, None] - indices[None, :]))
-    z = np.random.multivariate_normal(mean=np.zeros(size), cov=corr_matrix)
+    z = L @ np.random.randn(L.shape[0])
 
     # Step 2: Sample v ~ Exponential(1)
     v = np.random.exponential(scale=1.0)
 
     # Step 3: Apply Gaussian trick and scale for ε
     return (z / np.sqrt(v)) / epsilon
+
+def inject_noise_into_windows(windows):
+    X_flat = flatten_windows_to_1d(windows)  # shape: (num_windows, 1800)
+
+    X_noised = np.zeros_like(X_flat)
+
+    # Precompute Cholesky decomposition of exponential decay covariance matrix
+    indices = np.arange(X_flat.shape[1])
+    corr_matrix = np.power(DECAY_FACTOR, np.abs(indices[:, None] - indices[None, :]))
+    L = np.linalg.cholesky(corr_matrix + JITTER_EPS * np.eye(X_flat.shape[1]))
+
+    print_with_timestamp(f"Injecting CLM DP noise at ε = {EPSILON} into windows...")
+    
+    for i in tqdm(range(X_flat.shape[0]), desc="Injecting noise", unit="window"): # Use progress bar
+        # Inject CLM noise into each window
+        noise = sample_correlated_laplace_noise(L, epsilon=EPSILON)
+        X_noised[i] = X_flat[i] + noise
+    
+    return X_noised
 
 def main():
     """
@@ -120,26 +141,16 @@ def main():
     X = np.load(X_PATH)
     y = np.load(Y_PATH)
     print_with_timestamp(f"Loaded {X.shape[0]} windows of shape {X.shape[1:]}...")
-
-    X_flat = flatten_windows_to_1d(X)  # shape: (num_windows, 1800)
-
-    X_noised = np.zeros_like(X_flat)
-
-    print_with_timestamp(f"Injecting CLM DP noise at ε = {EPSILON} into windows...")
     
-    for i in tqdm(range(X_flat.shape[0]), desc="Injecting noise into windows", unit="window"): # Use progress bar
-        # Inject CLM noise into each window
-        noise = sample_correlated_laplace_noise(X_flat.shape[1], epsilon=EPSILON, decay_factor=DECAY_FACTOR)
-        X_noised[i] = X_flat[i] + noise
+    os.makedirs(CLM_DP_OUTPUT_DIR_PATH, exist_ok=True)
 
-    clm_dp_output_dir_path = WINDOWS_DIR_PATH / f"{CLM_DP_BASE_DIR_NAME}_{EPSILON}"
-    os.makedirs(clm_dp_output_dir_path, exist_ok=True)
+    X_noised = inject_noise_into_windows(X)
 
     X_noised_reshaped = X_noised.reshape(X.shape)  # Reshape back to (num_windows, 200, 9)
-    np.save(clm_dp_output_dir_path / f"X_windows.npy", X_noised_reshaped)
-    np.save(clm_dp_output_dir_path / f"y_labels.npy", y)    
+    np.save(CLM_DP_OUTPUT_DIR_PATH / WINDOWS_FILE_NAME, X_noised_reshaped)
+    np.save(CLM_DP_OUTPUT_DIR_PATH / LABELS_FILE_NAME, y)    
 
-    print_with_timestamp(f"✅ Saved {X_noised_reshaped.shape[0]} noised windows to: {clm_dp_output_dir_path}")
+    print_with_timestamp(f"✅ Saved {X_noised_reshaped.shape[0]} noised windows to: {CLM_DP_OUTPUT_DIR_PATH}")
 
 
 if __name__ == '__main__':
