@@ -15,7 +15,7 @@ import optuna
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from model.model_util import *
-from util.util import print_color_text_with_timestamp, print_color_text, print_with_timestamp, bold_text
+from util.util import print_color_text_with_timestamp, print_color_text, print_with_timestamp, bold_text, color_text
 
 # Initial number of trials completed when Optuna study is loaded
 initial_completed = 0
@@ -233,9 +233,8 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         avg_train_loss = train_loss / len(train_loader)
         avg_val_loss = val_loss / len(val_loader)
 
-        print_color_text_with_timestamp(
-            f"Epoch {epoch+1}: Training Loss = {avg_train_loss:.4f}, Validation Loss = {avg_val_loss:.4f}, Accuracy = {acc:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, F1 = {f1:.4f}",
-            "BLUE"
+        print_with_timestamp(
+            f"{color_text(bold_text(f'Epoch {epoch+1}:'), "BLUE")} Training Loss = {avg_train_loss:.4f}, Validation Loss = {avg_val_loss:.4f}, Accuracy = {acc:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, F1 = {f1:.4f}"
         )
 
         # Update scheduler based on validation F1 score
