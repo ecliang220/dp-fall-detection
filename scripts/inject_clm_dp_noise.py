@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from util.util import print_with_timestamp, print_color_text_with_timestamp, get_timestamp_now
+from util.util import print_with_timestamp, print_color_text_with_timestamp, print_color_text, bold_text, get_timestamp_now
 
 # --------------------------------------------------------------------
 # Environment Config
@@ -125,7 +125,7 @@ def inject_noise_into_windows(windows, epsilon, L):
 
     X_noised = np.zeros_like(X_flat)
 
-    print_with_timestamp(f"Injecting CLM DP noise at ε = {epsilon} into windows...")
+    print_color_text_with_timestamp(f"Injecting CLM DP noise at {bold_text(f"ε = {epsilon}")} into windows...", "BRIGHT_BLUE")
     
     for i in tqdm(range(X_flat.shape[0]), desc="Injecting noise", unit="window"): # Use progress bar
         # Inject CLM noise into each window
@@ -218,7 +218,7 @@ def main():
         labels_file_path = clm_dp_output_dir_path / LABELS_FILE_NAME
 
         if all(path.exists() for path in [clm_dp_output_dir_path, windows_file_path, labels_file_path]):
-            print_color_text_with_timestamp(f"⚠️Skipping ε = {epsilon}: files already exist at {clm_dp_output_dir_path}", "YELLOW")
+            print_color_text_with_timestamp(f"⚠️Skipping {bold_text(f"ε = {epsilon}")}: files already exist at {clm_dp_output_dir_path}", "YELLOW")
             continue
 
         L = precompute_cholesky_decomp(X.shape[1] * X.shape[2])
@@ -230,7 +230,7 @@ def main():
         np.save(labels_file_path, y)    
 
         print_color_text_with_timestamp(f"✅Saved {X_noised_reshaped.shape[0]} noised windows at ε = {epsilon} to:", "RED")
-        print(clm_dp_output_dir_path)
+        print_color_text(clm_dp_output_dir_path, "BLUE")
 
         append_to_log(LOG_FILE_PATH, epsilon, DECAY_FACTOR, JITTER_EPS, X.shape, clm_dp_output_dir_path)
 

@@ -11,7 +11,7 @@ Date: 2025-06-09
 from datetime import datetime
 
 # --------------------------------------------------------------------
-# ANSI Color Codes for Terminal Output Color Adjustments
+# ANSI Style Codes for Terminal Output Text Adjustments
 # --------------------------------------------------------------------
 RED = '\033[31m'
 GREEN = '\033[32m'
@@ -20,6 +20,7 @@ BLUE = '\033[34m'
 PURPLE = '\033[35m'
 BRIGHT_BLUE = '\033[94m'
 BRIGHT_MAGENTA = '\033[95m'
+BOLD = '\033[1m'
 RESET = '\033[0m'
 
 # --------------------------------------------------------------------
@@ -35,6 +36,21 @@ ANSI_COLOR_DICT = {
     "BRIGHT_MAGENTA": BRIGHT_MAGENTA,
     "RESET": RESET
 }
+
+def bold_text(text):
+    """
+    Applies bold formatting to the given text using ANSI escape codes.
+
+    This function wraps the input text with the ANSI escape code for bold 
+    formatting, making it appear bold in terminal output.
+
+    Args:
+        text (str): The text to be bolded.
+
+    Returns:
+        str: The input text wrapped with the bold escape code and reset code.
+    """
+    return f"{BOLD}{text}{RESET}"
 
 def color_text(text, color):
     """
@@ -123,3 +139,43 @@ def print_color_text_with_timestamp(text, color):
        None 
     """
     print_with_timestamp(color_text(text, color))
+
+def print_color_text(text, color):
+    """
+    Prints the given text wrapped in the specified color for terminal output.
+
+    This function utilizes ANSI escape codes to display colored text in the terminal. 
+    The color is applied based on the provided color string, which must be a valid color defined in the ANSI color dictionary.
+
+    Available Colors:
+        - "RED"
+        - "GREEN"
+        - "YELLOW"
+        - "BLUE"
+        - "PURPLE"
+        - "BRIGHT_BLUE"
+        - "BRIGHT_MAGENTA"
+
+    Args:
+        text (str): The text to be printed with the specified color in the terminal.
+        color (str): The desired text color.
+
+    Returns:
+        None
+    """
+    print(color_text(text, color))
+
+def print_bold_text(text):
+    """
+    Prints the given text with bold formatting using ANSI escape codes.
+
+    This function wraps the input text with the ANSI escape code for bold 
+    formatting and prints it to the terminal.
+
+    Args:
+        text (str): The text to be printed in bold.
+
+    Returns:
+        None
+    """
+    print(bold_text(text))
