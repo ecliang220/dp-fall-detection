@@ -39,8 +39,8 @@ METRICS_DIR_PATH = PROJECT_ROOT / "results"/ "identity"
 # File path for identity classifier performance metrics
 BEST_MODEL_METRICS_FILE_PATH = METRICS_DIR_PATH / "best_identity_model_metrics.csv"
 
-# File path for binary fall detection classifier hyperparameters
-BEST_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_model_hyperparams.csv"
+# File path for multi-class identity inference classifier hyperparameters
+BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_model_hyperparams.csv"
 
 # Random seed for reproducibility across dataset splits, model initialization, and Optuna trials
 RANDOM_SEED = 42
@@ -493,7 +493,7 @@ def main():
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")
 
-    with open(BEST_MODEL_HYPERPARAMS_FILE_PATH, "w", newline="") as csvFile:
+    with open(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH, "w", newline="") as csvFile:
         csvWriter = csv.writer(csvFile)
         csvWriter.writerow(["layer_count", "learning_rate", "batch_size", "num_channels", "dropout"])
         csvWriter.writerow(
