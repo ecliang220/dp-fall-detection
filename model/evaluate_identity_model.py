@@ -42,7 +42,7 @@ def main():
     print(f"F1 Score: {f1:.4f}")
 
     print_with_timestamp(f"Saving hyperparams...")
-    print_color_text(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH)
+    print_color_text(str(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH), "BLUE")
     with open(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH, "w", newline="") as csv_file:
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(["layer_count", "learning_rate", "batch_size", "num_channels", "dropout"])
@@ -56,6 +56,9 @@ def main():
     
     
     os.makedirs(IDENTITY_METRICS_DIR_PATH, exist_ok=True)
+
+    print_with_timestamp(f"Saving performance metrics...")
+    print_color_text(str(BEST_IDENTITY_MODEL_METRICS_FILE_PATH), "BLUE")
     # Output FINAL best model performance metrics to CSV file
     with open(BEST_IDENTITY_MODEL_METRICS_FILE_PATH, "w", newline="") as csv_file:
         csv_writer = csv.writer(csv_file)
