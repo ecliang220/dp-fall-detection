@@ -122,11 +122,11 @@ def prepare_all_files(root_directory_path):
     np.save(X_PATH, X)
     np.save(Y_FALL_PATH, y_fall)
     np.save(Y_IDENTITY_PATH, y_identity)
-    
+
     assert X.shape[0] == y_fall.shape[0] == y_identity.shape[0], "Mismatch in window and label counts"
 
     print("_______________________________________________________")
-    print_color_text_with_timestamp(f"Total windows: {X.shape[0]}, Fall labels: {y_fall.shape[0]}, Identity labels: {y_identity.shape[0]}", "BRIGHT_CYAN")
+    print_color_text_with_timestamp(f"Total windows: {X.shape[0]}, Fall labels: {y_fall.shape[0]}, Identity labels: {y_identity.shape[0]}", "RED")
     print_color_text_with_timestamp(f"Saved {X.shape[0]} windows to:", "RED")
     print_color_text(str(X_PATH), "BLUE")
     print_color_text_with_timestamp(f"Saved {y_fall.shape[0]} fall labels to:", "RED")
