@@ -127,7 +127,7 @@ def inject_noise_into_windows(windows, epsilon, L):
 
     X_noised = np.zeros_like(X_flat)
 
-    print_color_text_with_timestamp(f"Injecting CLM DP noise at {bold_text(f"ε = {epsilon}")} into windows...", "BRIGHT_BLUE")
+    print_color_text_with_timestamp(f"Injecting CLM DP noise at {bold_text(f'ε = {epsilon}')} into windows...", "BRIGHT_BLUE")
     
     for i in tqdm(range(X_flat.shape[0]), desc="Injecting noise", unit="window"): # Use progress bar
         # Inject CLM noise into each window
