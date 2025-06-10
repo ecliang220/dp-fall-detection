@@ -25,6 +25,10 @@ PROJECT_ROOT = COLAB_ROOT if IS_COLAB else LOCAL_ROOT
 # --------------------------------------------------------------------
 # Model Config
 # --------------------------------------------------------------------
+# Number of epochs to train the CNN model during each trial
+NUM_EPOCHS = 30
+# Number of epochs to wait without F1 improvement before stopping early
+EARLY_STOPPING_PATIENCE = 5
 # Threshold for classifying sigmoid output (0.0–1.0) as binary class
 SIGMOID_BINARY_CLASSIFICATION_THRESHOLD = 0.5
 # Random seed for reproducibility
@@ -61,9 +65,9 @@ Y_IDENTITY_PATH = WINDOWS_DIR_PATH / IDENTITY_LABELS_FILE_NAME
 # Directory path for saved model files (best performing CNN weights)
 MODEL_DIR_PATH = PROJECT_ROOT / "model"
 # Directory path for Fall Detection binary classifer checkpoints
-FALL_MODEL_DIR_PATH =  MODEL_DIR_PATH / "checkpoints"
+FALL_MODEL_DIR_PATH =  MODEL_DIR_PATH / "fall_checkpoints"
 # File path for trained best Fall model
-BEST_FALL_MODEL_FILE_PATH = FALL_MODEL_DIR_PATH / "best_model.pt"
+BEST_FALL_MODEL_FILE_PATH = FALL_MODEL_DIR_PATH / "best_fall_model.pt"
 # Directory path for Identity Inference multi-class classifer checkpoints
 IDENTITY_MODEL_DIR_PATH =  MODEL_DIR_PATH / "identity_checkpoints"
 # File path for trained best Identity model
@@ -71,6 +75,11 @@ BEST_IDENTITY_MODEL_FILE_PATH = IDENTITY_MODEL_DIR_PATH / "best_identity_model.p
 
 # Directory for model evaluation metrics and Optuna optimization results
 METRICS_DIR_PATH = PROJECT_ROOT / "results"
+
+# Directory for saving FALL model evaluation metrics and Optuna optimization results
+FALL_METRICS_DIR_PATH = PROJECT_ROOT / "results"/ "fall"
+# File path for FALL classifier performance metrics
+BEST_FALL_MODEL_METRICS_FILE_PATH = FALL_METRICS_DIR_PATH / "best_fall_model_metrics.csv"
 
 # Directory for saving IDENTITY model evaluation metrics and Optuna optimization results
 IDENTITY_METRICS_DIR_PATH = PROJECT_ROOT / "results"/ "identity"
@@ -83,14 +92,31 @@ CLM_DP_METRICS_DIR_PATH = METRICS_DIR_PATH / "clm_dp"
 CLM_DP_EVAL_METRICS_FILE_PATH = CLM_DP_METRICS_DIR_PATH / "clm_dp_eval_metrics.csv"
 
 # File path for best FALL model hyperparameters from Optuna tuning
-BEST_FALL_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_model_hyperparams.csv"
+BEST_FALL_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_fall_model_hyperparams.csv"
 # File path for best IDENTITY model hyperparameters from Optuna tuning
 BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH = METRICS_DIR_PATH / "best_identity_model_hyperparams.csv"
 
 # --------------------------------------------------------------------
-# Optuna Config
+# Fall Detection Classifier Optuna Config
 # --------------------------------------------------------------------
 OPTUNA_STORAGE_DIR_PATH = PROJECT_ROOT / "storage"
+
+OPTUNA_FALL_STORAGE_PATH = f"sqlite:///{str(Path(PROJECT_ROOT) / 'storage' / 'optuna_fall_detection.db')}"
+OPTUNA_FALL_RESULTS_FILE_PATH = METRICS_DIR_PATH / "optuna_fall_results.csv"
+OPTUNA_FALL_STUDY_NAME = "CNN_fall_detection_optimization"
+OPTUNA_FALL_N_TRIALS = 30 # more trials to run
+OPTUNA_FALL_LR_MIN = 1e-4
+OPTUNA_FALL_LR_MAX = 1e-2
+OPTUNA_FALL_DROPOUT_MIN = 0.3
+OPTUNA_FALL_DROPOUT_MAX = 0.6
+OPTUNA_FALL_BATCH_SIZE_VALS = [16, 32, 64, 128]
+OPTUNA_FALL_NUM_CHANNELS_VALS = [64, 128, 256]
+OPTUNA_FALL_LAYERS_MIN = 3
+OPTUNA_FALL_LAYERS_MAX = 5
+
+# --------------------------------------------------------------------
+# Identity Inference Classifier Optuna Config
+# --------------------------------------------------------------------
 OPTUNA_IDENTITY_STORAGE_PATH = f"sqlite:///{str(Path(PROJECT_ROOT) / 'storage' / 'optuna_identity_inference.db')}"
 OPTUNA_IDENTITY_STUDY_NAME = "CNN_identity_classification_optimization"
 

@@ -8,4 +8,5 @@ model/dp/
 model/dp_fall_detection/
 model/identity_checkpoints/
 model/train_model_*.py
+**/__pycache__
 venv/
