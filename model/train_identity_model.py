@@ -1,13 +1,9 @@
 import csv
 import os
-import numpy as np
-import random
 import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset, random_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import precision_score, recall_score, f1_score
 from pathlib import Path
 
@@ -182,7 +178,7 @@ def main():
         dropout=dr
     )
 
-    print(f"\nTraining {lc}-layer Identity CNN...")
+    print_color_text_with_timestamp(f"\nTraining {lc}-layer Identity CNN...", "PURPLE")
     print(f"Learning Rate: {lr}")
     print(f"Batch Size: {bs}")
     print(f"Number of Channels: {nc}")
@@ -194,9 +190,11 @@ def main():
     # (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], best_model_state)
     _, accuracy, precision, recall, f1, model_state = train_model(model, train_loader, val_loader, lr, epochs=NUM_EPOCHS, all_metrics=True)
 
+    saved_model_file_name = f"model-lc{lc}-f1{f1:.3f}-acc{accuracy:.3f}.pt"
+
     if model_state:
         os.makedirs(IDENTITY_MODEL_DIR_PATH, exist_ok=True)
-        torch.save(model_state, IDENTITY_MODEL_DIR_PATH  / f"model-lc{lc}-f1{f1:.3f}-acc{accuracy:.3f}.pt")
+        torch.save(model_state, IDENTITY_MODEL_DIR_PATH  / saved_model_file_name)
 
     print_model_metrics(accuracy, precision, recall, f1, summary_title="Trained Identity Model Results")
 
@@ -208,11 +206,11 @@ def main():
         num_channels=identity_hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS),
         dropout=identity_hyperparams.get("dropout", DEFAULT_DROPOUT)
     )
-    best_model.load_state_dict(torch.load(IDENTITY_MODEL_DIR_PATH / f"model-lc{lc}-f1{f1:.3f}-acc{accuracy:.3f}.pt"))
+    best_model.load_state_dict(torch.load(IDENTITY_MODEL_DIR_PATH / saved_model_file_name, weights_only=True))
 
 
     # Reload data with best batch size
-    _, val_loader = load_data(X_PATH, Y_FALL_PATH, bs)
+    _, val_loader = load_data(X_PATH, Y_IDENTITY_PATH, bs)
 
     # Re-evaluate on validation data
     accuracy, precision, recall, f1 = evaluate_identity_inference_model(best_model, val_loader)
