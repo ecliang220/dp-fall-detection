@@ -12,7 +12,7 @@ from model.model_util import *
 from util.util import print_with_timestamp, print_color_text
 
 def main():
-    print_with_timestamp("\nEvaluating best model with best trial parameters...")
+    print_with_timestamp("Evaluating best model with best trial parameters...")
 
     # TODO: (TEMPORARY) Replace BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH with `all_time_best_identity_model_hyperparams.csv`
     # To test new sliced dual-label windows against best model hyperparams tuned on single label windows
@@ -76,7 +76,7 @@ def main():
         csv_writer.writerow(["layer_count", "learning_rate", "batch_size", "num_channels", "dropout"])
         csv_writer.writerow(
             [identity_hyperparams["layer_count"], 
-             identity_hyperparams["lr"], 
+             identity_hyperparams["learning_rate"], 
              identity_hyperparams["batch_size"], 
              identity_hyperparams["num_channels"], 
              identity_hyperparams["dropout"]]
