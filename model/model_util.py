@@ -290,20 +290,21 @@ def load_data(x_path, y_path, batch_size):
 
 def make_fall_detection_cnn(layer_count, num_channels, dropout):
     """
-    Constructs a 1D CNN for fall detection using privacy-compatible layers.
+    Base CNN model: Builds a 1D CNN model for fall detection using variable-depth architecture.
 
-    - Stacks convolutional blocks with GroupNorm, ReLU, and optional MaxPool1d.
-    - Doubles the number of channels after each convolutional block.
-    - Applies global average pooling, dropout, and a final linear layer.
-    - Output is a single logit (no activation), intended for BCEWithLogitsLoss.
+    - The network begins with an initial Conv1D + BatchNorm + ReLU + MaxPool block.
+    - Additional convolutional blocks are added based on the specified layer_count.
+    - Each additional block doubles the number of channels and includes Conv1D + BatchNorm + ReLU.
+    - MaxPool1d is applied only in the first two additional blocks.
+    - The output is pooled, flattened, and passed through fully connected layers ending in a single sigmoid-logit output.
 
     Args:
-        layer_count (int): Number of convolutional blocks (minimum 3).
-        num_channels (int): Number of filters in the first convolutional layer.
-        dropout (float): Dropout rate before the final output layer.
+        layer_count (int): Total number of convolutional blocks to include (minimum 3).
+        num_channels (int): Number of output channels for the first convolutional layer.
+        dropout (float): Dropout probability applied before the final output layer.
 
     Returns:
-        nn.Sequential: The constructed CNN model.
+        nn.Sequential: A PyTorch Sequential model ready for training.
     """
     layers = []
     input_channels = 9 # for 9 sensors
@@ -311,14 +312,14 @@ def make_fall_detection_cnn(layer_count, num_channels, dropout):
 
     # Add the first conv block
     layers.append(nn.Conv1d(input_channels, num_channels, kernel_size=5, padding=2))
-    layers.append(nn.GroupNorm(1, current_channels))
+    layers.append(nn.BatchNorm1d(num_channels))
     layers.append(nn.ReLU())
     layers.append(nn.MaxPool1d(2))
 
     for i in range(1, layer_count):
         next_channels = current_channels * 2
         layers.append(nn.Conv1d(current_channels, next_channels, kernel_size=3, padding=1))
-        layers.append(nn.GroupNorm(1, next_channels))
+        layers.append(nn.BatchNorm1d(next_channels))
         layers.append(nn.ReLU())
 
         if i < 3:
