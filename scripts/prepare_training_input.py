@@ -8,20 +8,8 @@ import sys
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from util.util import print_color_text_with_timestamp, print_color_text
-from model.model_util import WINDOWS_DIR_PATH, X_PATH, Y_FALL_PATH, Y_IDENTITY_PATH
-
-# Directory containing preprocessed CSV files (1 file = 1 trial)
-ROOT_INPUT_DIR_PATH = Path("../data/preprocessed")
-
-# Fixed-length sliding window parameters
-WINDOW_SIZE = 200           # 200 rows = 1 second at 200 Hz
-WINDOW_INTERVAL = 100       # 50% overlap (stride = 100)
-
-# Number of Adult participants
-NUM_ADULTS = 23
-
-# Number of Elder participants
-NUM_ELDERS = 15
+from model.model_util import WINDOWS_DIR_PATH, X_PATH, Y_FALL_PATH, Y_IDENTITY_PATH, PREPROCESSED_DIR_PATH
+from model.model_util import WINDOW_SIZE, WINDOW_INTERVAL, NUM_ADULTS
 
 def prepare_windows_for_file(file_path):
     """
@@ -147,7 +135,7 @@ def main():
     - Fall detection (binary labels)
     - Identity inference (participant ID labels)
     """
-    prepare_all_files(ROOT_INPUT_DIR_PATH)
+    prepare_all_files(PREPROCESSED_DIR_PATH)
 
 if __name__ == '__main__':
     main()

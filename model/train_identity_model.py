@@ -105,7 +105,7 @@ def make_cnn(layer_count, num_channels, dropout):
         nn.Sequential: A PyTorch Sequential model ready for training.
     """
     layers = []
-    input_channels = 9 # for 9 sensors
+    input_channels = 9 # for 9 sensor channels
     current_channels = num_channels
 
     # Add the first conv block
@@ -234,7 +234,7 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         avg_val_loss = val_loss / len(val_loader)
 
         print_with_timestamp(
-            f"{color_text(bold_text(f'Epoch {epoch+1}:'), "BLUE")} Training Loss = {avg_train_loss:.4f}, Validation Loss = {avg_val_loss:.4f}, Accuracy = {acc:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, F1 = {f1:.4f}"
+            f"{color_text(bold_text(f'Epoch {epoch+1}:'), 'BLUE')} Training Loss = {avg_train_loss:.4f}, Validation Loss = {avg_val_loss:.4f}, Accuracy = {acc:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, F1 = {f1:.4f}"
         )
 
         # Update scheduler based on validation F1 score
@@ -417,7 +417,7 @@ def main():
     print(f"Best F1 Score: {study.best_trial.value:.4f}")
 
     # === Best Model Evaluation ===
-    print_color_text_with_timestamp("\nEvaluating best model with best trial parameters...", "BRIGHT_MAGENTA")
+    print_color_text_with_timestamp("Evaluating best model with best trial parameters...", "BRIGHT_MAGENTA")
 
     best_params = study.best_trial.params
     best_model = make_cnn(
@@ -433,7 +433,7 @@ def main():
     # Re-evaluate on validation data
     acc, precision, recall, f1 = evaluate_model(best_model, val_loader)
 
-    print_color_text_with_timestamp("\nFinal Evaluation of Best Model:", "BRIGHT_MAGENTA")
+    print_color_text_with_timestamp("Final Evaluation of Best Model:", "BRIGHT_MAGENTA")
     print(f"Accuracy: {acc:.4f}")
     print(f"Precision: {precision:.4f}")
     print(f"Recall: {recall:.4f}")

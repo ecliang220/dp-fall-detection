@@ -30,48 +30,18 @@ from util.util import print_with_timestamp, print_color_text_with_timestamp, pri
 from model.model_util import set_seed
 
 # --------------------------------------------------------------------
-# Environment Config
-# --------------------------------------------------------------------
-# Detect if running in Google Colab
-IS_COLAB = "google.colab" in sys.modules
-# Root project path for Google Colab
-COLAB_ROOT = "/content/drive/MyDrive/Summer2025/CSC499/dp-fall-detection"
-# Root project path for local machine (one level up from this script)
-LOCAL_ROOT = Path(__file__).resolve().parents[1]
-# Dynamically resolve project root based on environment 
-PROJECT_ROOT = COLAB_ROOT if IS_COLAB else LOCAL_ROOT
-
-# --------------------------------------------------------------------
-# Experiment: CLM Differential Privacy Config
-# --------------------------------------------------------------------
-# Epsilon values to test (weakest to strongest)
-EPSILON_VALS = [8.0, 4.0, 2.0, 1.0, 0.5]
-# Controls strength of temporal correlation; higher = stronger correlation across time steps (0 < decay < 1)
-DECAY_FACTOR = 0.95
-# Numerical jitter added to the diagonal to ensure positive-definiteness
-JITTER_EPS = 1e-6
-# Boolean value indicating whether to skip or overwrite existing files for reruns of epsilon values
-SKIP_EXISTING = False
-
-# --------------------------------------------------------------------
 # Directory and File Paths
 # --------------------------------------------------------------------
-# Directory Path for Training Windows
-WINDOWS_DIR_PATH = PROJECT_ROOT / "data/windows"
+from model.model_util import (
+    X_PATH, Y_FALL_PATH, Y_IDENTITY_PATH, 
+    WINDOWS_DIR_PATH, WINDOWS_FILE_NAME, 
+    FALL_LABELS_FILE_NAME, IDENTITY_LABELS_FILE_NAME, 
+    LOG_FILE_PATH,
+    CLM_DP_Experiment # CLM-DP Experiment Constants
+    )
 
-# Training model input file names
-WINDOWS_FILE_NAME = "X_windows.npy"
-LABELS_FILE_NAME = "y_labels.npy"
-
-# Training model input files: windowed IMU data and binary labels in .npy format
-X_PATH = WINDOWS_DIR_PATH / WINDOWS_FILE_NAME
-Y_PATH = WINDOWS_DIR_PATH / LABELS_FILE_NAME
-
-# Directory Path for Output Logs
-LOGS_DIR_PATH = PROJECT_ROOT / "logs"
-
-# File Path for Log of Windows with Noise Injection Completed
-LOG_FILE_PATH = LOGS_DIR_PATH / "noise_injection_log.csv"
+# Boolean value indicating whether to skip or overwrite existing files for reruns of epsilon values
+SKIP_EXISTING = False
 
 def flatten_windows_to_1d(X_windows):
     """
@@ -149,9 +119,9 @@ def precompute_cholesky_decomp(size):
     """
     # Precompute Cholesky decomposition of exponential decay covariance matrix
     indices = np.arange(size)
-    corr_matrix = np.power(DECAY_FACTOR, np.abs(indices[:, None] - indices[None, :]))
+    corr_matrix = np.power(CLM_DP_Experiment.DECAY_FACTOR, np.abs(indices[:, None] - indices[None, :]))
 
-    return np.linalg.cholesky(corr_matrix + JITTER_EPS * np.eye(size))
+    return np.linalg.cholesky(corr_matrix + CLM_DP_Experiment.JITTER_EPS * np.eye(size))
 
 def append_to_log(log_path, epsilon, decay_factor, jitter_eps, X_shape, output_dir):
     """
@@ -212,15 +182,18 @@ def main():
 
     print_with_timestamp("Loading Cleaned IMU Windows and Labels...")
     X = np.load(X_PATH)
-    y = np.load(Y_PATH)
+    y_fall = np.load(Y_FALL_PATH)
+    Y_identity = np.load(Y_IDENTITY_PATH)
+
     print_with_timestamp(f"Loaded {X.shape[0]} windows of shape {X.shape[1:]}.")
 
-    for epsilon in EPSILON_VALS:
+    for epsilon in CLM_DP_Experiment.EPSILON_VALS:
         clm_dp_output_dir_path = WINDOWS_DIR_PATH / f"clm_dp_eps_{epsilon}"
         windows_file_path = clm_dp_output_dir_path / WINDOWS_FILE_NAME
-        labels_file_path = clm_dp_output_dir_path / LABELS_FILE_NAME
+        fall_labels_file_path = clm_dp_output_dir_path / FALL_LABELS_FILE_NAME
+        identity_labels_file_path = clm_dp_output_dir_path / IDENTITY_LABELS_FILE_NAME
 
-        if SKIP_EXISTING and all(path.exists() for path in [clm_dp_output_dir_path, windows_file_path, labels_file_path]):
+        if SKIP_EXISTING and all(path.exists() for path in [clm_dp_output_dir_path, windows_file_path, fall_labels_file_path, identity_labels_file_path]):
             print_color_text_with_timestamp(f"⚠️Skipping {bold_text(f'ε = {epsilon}')}: files already exist at {clm_dp_output_dir_path}", "YELLOW")
             continue
 
@@ -230,12 +203,13 @@ def main():
         os.makedirs(clm_dp_output_dir_path, exist_ok=True)
         X_noised_reshaped = X_noised.reshape(X.shape)  # Reshape back to (num_windows, 200, 9)
         np.save(windows_file_path, X_noised_reshaped)
-        np.save(labels_file_path, y)    
+        np.save(fall_labels_file_path, y_fall)
+        np.save(identity_labels_file_path, Y_identity)    
 
         print_color_text_with_timestamp(f"✅Saved {X_noised_reshaped.shape[0]} noised windows at ε = {epsilon} to:", "RED")
         print_color_text(clm_dp_output_dir_path, "BLUE")
 
-        append_to_log(LOG_FILE_PATH, epsilon, DECAY_FACTOR, JITTER_EPS, X.shape, clm_dp_output_dir_path)
+        append_to_log(LOG_FILE_PATH, epsilon, CLM_DP_Experiment.DECAY_FACTOR, CLM_DP_Experiment.JITTER_EPS, X.shape, clm_dp_output_dir_path)
 
     print()
     print_color_text_with_timestamp(f"Noise Injection Log saved to:", "RED")

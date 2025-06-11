@@ -1,5 +1,6 @@
 import sys
 import random
+import csv
 import numpy as np
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from torch.utils.data import DataLoader, TensorDataset, random_split
 
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.preprocessing import StandardScaler
+
+from util.util import print_color_text, print_color_text_with_timestamp
 
 # --------------------------------------------------------------------
 # Environment Config
@@ -21,6 +24,31 @@ COLAB_ROOT = "/content/drive/MyDrive/Summer2025/CSC499/dp-fall-detection"
 LOCAL_ROOT = Path(__file__).resolve().parents[1]
 # Dynamically resolve project root based on environment 
 PROJECT_ROOT = COLAB_ROOT if IS_COLAB else LOCAL_ROOT
+
+# --------------------------------------------------------------------
+# Data Details
+# --------------------------------------------------------------------
+# Number of Adult participants
+NUM_ADULTS = 23
+# Number of Elder participants
+NUM_ELDERS = 15
+
+# Fixed-length sliding window parameters
+WINDOW_SIZE = 200           # 200 rows = 1 second at 200 Hz
+WINDOW_INTERVAL = 100       # 50% overlap (stride = 100)
+
+# Directory containing Preprocessed .csv Timeseries Data
+PREPROCESSED_DIR_PATH = PROJECT_ROOT / "data/preprocessed"
+# Directory Path for Training Windows
+WINDOWS_DIR_PATH = PROJECT_ROOT / "data/windows"
+
+# Labels for FALL and IDENTITY windows 
+WINDOWS_FILE_NAME = "X_windows.npy"
+FALL_LABELS_FILE_NAME = "y_fall_labels.npy"
+IDENTITY_LABELS_FILE_NAME = "y_identity_labels.npy"
+X_PATH = WINDOWS_DIR_PATH / WINDOWS_FILE_NAME
+Y_FALL_PATH = WINDOWS_DIR_PATH / FALL_LABELS_FILE_NAME
+Y_IDENTITY_PATH = WINDOWS_DIR_PATH / IDENTITY_LABELS_FILE_NAME
 
 # --------------------------------------------------------------------
 # Model Config
@@ -37,19 +65,8 @@ RANDOM_SEED = 42
 NUM_CLASSES = 38 # Model will output 38 class scores
 
 # --------------------------------------------------------------------
-# Directory and File Paths/Names
+# Model Directory and File Paths/Names
 # --------------------------------------------------------------------
-# Directory Path for Training Windows
-WINDOWS_DIR_PATH = PROJECT_ROOT / "data/windows"
-
-# Labels for FALL and IDENTITY windows TODO: Determine whether we can just keep this set of windows/labels file names/paths
-WINDOWS_FILE_NAME = "X_windows.npy"
-FALL_LABELS_FILE_NAME = "y_fall_labels.npy"
-IDENTITY_LABELS_FILE_NAME = "y_identity_labels.npy"
-X_PATH = WINDOWS_DIR_PATH / WINDOWS_FILE_NAME
-Y_FALL_PATH = WINDOWS_DIR_PATH / FALL_LABELS_FILE_NAME
-Y_IDENTITY_PATH = WINDOWS_DIR_PATH / IDENTITY_LABELS_FILE_NAME
-
 # Directory path for saved model files (best performing CNN weights)
 MODEL_DIR_PATH = PROJECT_ROOT / "model"
 # Directory path for Fall Detection binary classifer checkpoints
@@ -61,6 +78,9 @@ IDENTITY_MODEL_DIR_PATH =  MODEL_DIR_PATH / "identity_checkpoints"
 # File path for trained best Identity model
 BEST_IDENTITY_MODEL_FILE_PATH = IDENTITY_MODEL_DIR_PATH / "best_identity_model.pt"
 
+# --------------------------------------------------------------------
+# Results/Metrics Directory and File Paths/Names
+# --------------------------------------------------------------------
 # Directory for model evaluation metrics and Optuna optimization results
 METRICS_DIR_PATH = PROJECT_ROOT / "results"
 
@@ -77,6 +97,11 @@ IDENTITY_METRICS_DIR_PATH = PROJECT_ROOT / "results"/ "identity"
 BEST_IDENTITY_MODEL_METRICS_FILE_PATH = IDENTITY_METRICS_DIR_PATH / "best_identity_model_metrics.csv"
 # File path for best IDENTITY model hyperparameters from Optuna tuning
 BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH = IDENTITY_METRICS_DIR_PATH / "best_identity_model_hyperparams.csv"
+
+# Directory Path for Output Logs
+LOGS_DIR_PATH = PROJECT_ROOT / "logs"
+# File Path for Log of Windows with Noise Injection Completed
+LOG_FILE_PATH = LOGS_DIR_PATH / "noise_injection_log.csv"
 
 # Directory for model evaluation metrics on CLM-DP data
 CLM_DP_METRICS_DIR_PATH = METRICS_DIR_PATH / "clm_dp"
@@ -118,6 +143,17 @@ OPTUNA_IDENTITY_NUM_CHANNELS_VALS = [64, 128, 256]
 OPTUNA_IDENTITY_LAYERS_MIN = 3
 OPTUNA_IDENTITY_LAYERS_MAX = 6
 
+class CLM_DP_Experiment:
+    # --------------------------------------------------------------------
+    # Experiment: CLM Differential Privacy Config
+    # --------------------------------------------------------------------
+    # Epsilon values to test (weakest to strongest)
+    EPSILON_VALS = [8.0, 4.0, 2.0, 1.0, 0.5]
+    # Controls strength of temporal correlation; higher = stronger correlation across time steps (0 < decay < 1)
+    DECAY_FACTOR = 0.95
+    # Numerical jitter added to the diagonal to ensure positive-definiteness
+    JITTER_EPS = 1e-6
+
 def set_seed(seed=RANDOM_SEED):
     """
     Sets random seeds for reproducibility across random, numpy, and torch.
@@ -145,6 +181,42 @@ def flatten_and_normalize_data(X):
     scaler = StandardScaler().fit(X_flat)
 
     return scaler.transform(X_flat).reshape(X.shape)
+
+def get_params_dict_from_csv(csv_file_path):
+    """
+    Extracts and returns model hyperparameters from a CSV file as a dictionary.
+
+    The CSV file should have the following format:
+        - The first row (header) contains the keys: 'layer_count', 'learning_rate', 'batch_size', 
+          'num_channels', and 'dropout'.
+        - The second row contains the corresponding values for these keys.
+
+    Args:
+        csv_file_path (str): Path to the CSV file containing model hyperparameters.
+
+    Returns:
+        dict: A dictionary with the model parameters ('layer_count', 'learning_rate', 'batch_size', 
+              'num_channels', 'dropout') converted to appropriate data types.
+    """
+    params = dict()
+    with open(csv_file_path, 'r') as csv_file:
+        csv_dict_reader = csv.DictReader(csv_file)
+        params = next(csv_dict_reader, {})
+        params = {
+            "layer_count": int(params["layer_count"]),
+            "learning_rate": float(params["learning_rate"]),
+            "batch_size": int(params["batch_size"]),
+            "num_channels": int(params["num_channels"]),
+            "dropout": float(params["dropout"]),
+        }
+    return params
+
+def print_model_metrics(accuracy, precision, recall, f1, summary_title="Final Evaluation of Best Model"):
+    print_color_text_with_timestamp(f"{summary_title}:", "BRIGHT_MAGENTA")
+    print(f"Accuracy: {accuracy:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print_color_text(f"F1 Score: {f1:.4f}", "RED")
 
 
 def load_data(x_path, y_path, batch_size):
