@@ -1,10 +1,34 @@
+"""
+evaluate_clm_dp_models.py
 
+Evaluates the performance of pre-trained fall detection and identity inference models 
+on IMU data noised with the Correlated Laplace Mechanism for Differntial Privacy (CLM-DP) 
+under varying privacy budgets (ε).
+
+This script:
+    - Loads the best-performing model weights and hyperparameters for both classifiers.
+    - Iterates over a set of ε values corresponding to different levels of differential privacy.
+    - Loads the corresponding noised input windows and dual labels.
+    - Evaluates both models using standard classification metrics (accuracy, precision, recall, F1).
+    - Logs all results to a CSV file for analysis of the privacy–utility tradeoff.
+
+Inputs:
+    - Model weight files (best checkpoints for both tasks)
+    - Hyperparameter files (CSV)
+    - CLM-DP noised sensor windows and dual labels
+
+Outputs:
+    - CSV file containing performance metrics for each ε level:
+        `clm_dp_eval_metrics.csv`
+
+Author: Ellie Liang
+Date: 2025-06-09
+"""
 import csv
 import sys
 import os
 
 from pathlib import Path
-import numpy as np
 import torch
 
 # Add project root to sys.path so `util` functions can be found
@@ -24,8 +48,20 @@ from model.model_util import (
 )
 
 def main():
-    # === Model Loading ===
+    """
+    Evaluates fall detection and identity inference models on sensor data noised under 
+    different CLM-DP ε levels.
 
+    For each ε in the experiment:
+        - Loads noised IMU data and corresponding fall and identity labels.
+        - Applies the best-performing models to the noised input.
+        - Computes and prints performance metrics: accuracy, precision, recall, and F1-score.
+        - Logs results to a CSV file for utility–privacy analysis.
+
+    This function assumes that models and noised data are already prepared and saved 
+    in the appropriate directory structure.
+    """
+    # === Model Loading ===
     # Load hyperparams that yielded best performance metrics for FALL DETECTION MODEL
     fall_hyperparams = get_params_dict_from_csv(BEST_FALL_MODEL_HYPERPARAMS_FILE_PATH)
     best_fall_model = make_fall_detection_cnn(
