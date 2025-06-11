@@ -56,7 +56,7 @@ def main():
         - Evaluates the model on the validation set using classification metrics.
         - Prints and logs the model’s performance and associated hyperparameters to CSV files.
     """
-    print_color_text_with_timestamp("Evaluating best model with best trial parameters...", "MAGENTA")
+    print_color_text_with_timestamp("Evaluating best model with best trial parameters...", "PURPLE")
 
     if BEST_FALL_MODEL_HYPERPARAMS_FILE_PATH.exists():
         # Load best hyperparams from CSV file 
