@@ -1,3 +1,19 @@
+"""
+model_util.py
+
+This module provides core utilities for training, evaluating, and configuring CNN-based models 
+for fall detection and identity inference using wearable IMU sensor data. It defines dataset 
+paths, model architectures, evaluation functions, and hyperparameter management tools for use 
+in privacy-preserving machine learning experiments (including differential privacy via CLM-DP).
+
+Key functionalities:
+- CNN model definitions for fall detection and identity inference.
+- Evaluation functions for binary and multi-class classifiers.
+- Data loading and normalization.
+- Hyperparameter reading and formatting.
+- Path definitions for datasets, models, metrics, and experiment logs.
+- Constants for model configuration and Optuna tuning ranges.
+"""
 import sys
 import random
 import csv
@@ -63,6 +79,13 @@ SIGMOID_BINARY_CLASSIFICATION_THRESHOLD = 0.5
 RANDOM_SEED = 42
 # Number of classes for training IDENTITY inference classifier
 NUM_CLASSES = 38 # Model will output 38 class scores
+
+# Default Hyperparameter Values to fallback on
+DEFAULT_LAYER_COUNT = 5
+DEFAULT_LEARNING_RATE = 0.003167
+DEFAULT_BATCH_SIZE = 128
+DEFAULT_DROPOUT = 0.3606
+DEFAULT_NUM_CHANNELS = 256
 
 # --------------------------------------------------------------------
 # Model Directory and File Paths/Names
@@ -144,6 +167,14 @@ OPTUNA_IDENTITY_LAYERS_MIN = 3
 OPTUNA_IDENTITY_LAYERS_MAX = 6
 
 class CLM_DP_Experiment:
+    """
+    Configuration class for the Correlated Laplace Mechanism (CLM) Differential Privacy experiment.
+
+    Attributes:
+        EPSILON_VALS (list of float): Privacy budgets (ε) to evaluate, from weakest to strongest DP.
+        DECAY_FACTOR (float): Controls temporal correlation in the noise; higher means stronger correlation.
+        JITTER_EPS (float): Small value added to diagonal of covariance matrix to ensure positive-definiteness.
+    """
     # --------------------------------------------------------------------
     # Experiment: CLM Differential Privacy Config
     # --------------------------------------------------------------------
