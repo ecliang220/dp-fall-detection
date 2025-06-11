@@ -1,165 +1,29 @@
+"""
+TODO: THIS FILE IS NOT READY YET!!!!!!!!!!!!!!!!!!
+"""
+
 import csv
 import os
-import numpy as np
-import random
 import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset, random_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import precision_score, recall_score, f1_score
 from pathlib import Path
-import optuna
 
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from model.model_util import *
+from util.util import print_color_text_with_timestamp, print_color_text, print_with_timestamp, bold_text, color_text
 
 # Initial number of trials completed when Optuna study is loaded
 initial_completed = 0
 
-def flatten_and_normalize_data(X):
-    """
-    Normalizes sensor data across all windows using standard scaling.
-
-    Args:
-        X (np.ndarray): A 3D NumPy array of shape (num_windows, time_steps, num_features).
-
-    Returns:
-        np.ndarray: A normalized array of the same shape with zero mean and unit variance per feature.
-    """
-    X_flat = X.reshape(-1, X.shape[-1])
-    scaler = StandardScaler().fit(X_flat)
-
-    return scaler.transform(X_flat).reshape(X.shape)
-
-def compute_class_balance(train_loader):
-    """
-    Computes the class imbalance ratio (negative / positive) 
-    from the training dataset to be used as pos_weight for BCEWithLogitsLoss.
-
-    Args:
-        train_loader (DataLoader): DataLoader containing the training set.
-
-    Returns:
-        float: Ratio of negative to positive samples.
-    """
-    pos = 0
-    neg = 0
-    for _, labels in train_loader:
-        pos += (labels == 1).sum().item()
-        neg += (labels == 0).sum().item()
-    return neg / pos if pos > 0 else 1.0
-
-
-def set_seed(seed=42):
-    """
-    Sets random seeds for reproducibility across random, numpy, and torch.
-
-    Args:
-        seed (int): The seed value to use. Default is 42.
-    """
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-
-
-def load_data(x_path, y_path, batch_size):
-    """
-    Loads and prepares data for training and validation.
-
-    - Loads windowed sensor data and labels from .npy files.
-    - Normalizes the input features using StandardScaler.
-    - Converts the arrays to PyTorch tensors.
-    - Splits into training and validation datasets (80/20 split).
-
-    Args:
-        x_path (Path): Path to the input windowed feature array (.npy).
-        y_path (Path): Path to the corresponding label array (.npy).
-        batch_size (int): Batch size for DataLoaders.
-
-    Returns:
-        tuple: DataLoader objects for training and validation.
-    """
-    # Load data as NumPy arrays
-    X = np.load(x_path)
-    y = np.load(y_path)
-
-    X_scaled = flatten_and_normalize_data(X)
-
-    # Convert to torch tensors
-    X_tensor = torch.tensor(X_scaled, dtype=torch.float32)
-    y_tensor = torch.tensor(y, dtype=torch.float32).unsqueeze(1)
-
-    dataset = TensorDataset(X_tensor, y_tensor)
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_set, val_set = random_split(dataset, [train_size, val_size])
-
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=batch_size)
-
-    return train_loader, val_loader
-
-def make_cnn(layer_count, num_channels, dropout):
-    """
-    Base CNN model: Builds a 1D CNN model for fall detection using variable-depth architecture.
-
-    - The network begins with an initial Conv1D + BatchNorm + ReLU + MaxPool block.
-    - Additional convolutional blocks are added based on the specified layer_count.
-    - Each additional block doubles the number of channels and includes Conv1D + BatchNorm + ReLU.
-    - MaxPool1d is applied only in the first two additional blocks.
-    - The output is pooled, flattened, and passed through fully connected layers ending in a single sigmoid-logit output.
-
-    Args:
-        layer_count (int): Total number of convolutional blocks to include (minimum 3).
-        num_channels (int): Number of output channels for the first convolutional layer.
-        dropout (float): Dropout probability applied before the final output layer.
-
-    Returns:
-        nn.Sequential: A PyTorch Sequential model ready for training.
-    """
-    layers = []
-    input_channels = 9 # for 9 sensors
-    current_channels = num_channels
-
-    # Add the first conv block
-    layers.append(nn.Conv1d(input_channels, num_channels, kernel_size=5, padding=2))
-    layers.append(nn.BatchNorm1d(num_channels))
-    layers.append(nn.ReLU())
-    layers.append(nn.MaxPool1d(2))
-
-    for i in range(1, layer_count):
-        next_channels = current_channels * 2
-        layers.append(nn.Conv1d(current_channels, next_channels, kernel_size=3, padding=1))
-        layers.append(nn.BatchNorm1d(next_channels))
-        layers.append(nn.ReLU())
-
-        if i < 3:
-            layers.append(nn.MaxPool1d(2))
-        
-        current_channels = next_channels
-
-    layers.append(nn.AdaptiveAvgPool1d(1))
-
-    model = nn.Sequential(
-        *layers,
-        nn.Flatten(),
-        nn.Linear(current_channels, 128), 
-        nn.ReLU(),
-        nn.Dropout(dropout),
-        nn.Linear(128, 1)
-    )
-    return model
-
 def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCHS, all_metrics=True):
     """
-    Trains and evaluates the CNN model on fall detection data.
+    Trains and evaluates the CNN model on the fall detection dataset.
 
-    - Uses BCEWithLogitsLoss with class imbalance correction via pos_weight.
+    - Uses CrossEntropyLoss for multi-class classification.
     - Applies Adam optimizer and learning rate scheduling based on validation F1 score.
     - Performs early stopping if no F1 improvement is observed for `patience` epochs.
     - Tracks training and validation performance, including accuracy, precision, recall, and F1.
@@ -183,10 +47,8 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
 
     model.to(device)
 
-    # Compute pos_weight for class imbalance handling
-    pos_weight = torch.tensor([compute_class_balance(train_loader)], dtype=torch.float32).to(device)
+    criterion = nn.CrossEntropyLoss()
 
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(device))
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
     # Tracking variables for early stopping
@@ -234,9 +96,9 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
                 X_batch = X_batch.permute(0, 2, 1)
                 output = model(X_batch)
                 val_loss += criterion(output, y_batch).item()
-                probs = torch.sigmoid(output) 
-                preds = (probs > SIGMOID_BINARY_CLASSIFICATION_THRESHOLD).float() 
-                correct += (preds == y_batch).sum().item()
+
+                preds = torch.argmax(output, dim=1)
+                correct += (preds == y_batch.view(-1)).sum().item()
                 total += y_batch.size(0)
 
                 all_preds.append(preds.cpu()) 
@@ -247,13 +109,15 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
         y_true = torch.cat(all_targets).numpy()
         y_pred = torch.cat(all_preds).numpy()
 
-        precision = precision_score(y_true, y_pred)  
-        recall = recall_score(y_true, y_pred) 
-        f1 = f1_score(y_true, y_pred)  
+        precision = precision_score(y_true, y_pred, average="weighted", zero_division=0) 
+        recall = recall_score(y_true, y_pred, average="weighted", zero_division=0) 
+        f1 = f1_score(y_true, y_pred, average="weighted")  
         avg_train_loss = train_loss / len(train_loader)
         avg_val_loss = val_loss / len(val_loader)
 
-        print(f"Epoch {epoch+1}: Training Loss = {avg_train_loss:.4f}, Validation Loss = {avg_val_loss:.4f}, Accuracy = {acc:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, F1 = {f1:.4f}")
+        print_with_timestamp(
+            f"{color_text(bold_text(f'Epoch {epoch+1}:'), 'BLUE')} Training Loss = {avg_train_loss:.4f}, Validation Loss = {avg_val_loss:.4f}, Accuracy = {acc:.4f}, Precision = {precision:.4f}, Recall = {recall:.4f}, F1 = {f1:.4f}"
+        )
 
         # Update scheduler based on validation F1 score
         scheduler.step(f1)
@@ -277,237 +141,92 @@ def train_model(model, train_loader, val_loader, learning_rate, epochs=NUM_EPOCH
     
     return (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], best_model_state) if all_metrics else best_f1
 
-def evaluate_model(model, val_loader):
-    """
-    Evaluates a trained model on a validation or test dataset.
-
-    - Applies sigmoid activation to model outputs and classifies predictions based on SIGMOID_BINARY_CLASSIFICATION_THRESHOLD.
-    - Computes standard binary classification metrics: accuracy, precision, recall, and F1 score.
-
-    Args:
-        model (nn.Module): Trained CNN model.
-        val_loader (DataLoader): DataLoader for validation or test data.
-
-    Returns:
-        tuple: (accuracy, precision, recall, f1)
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    model.eval()
-
-    correct = 0
-    total = 0
-    all_preds = []
-    all_targets = []
-
-    with torch.no_grad():
-        for X_batch, y_batch in val_loader:
-            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-            X_batch = X_batch.permute(0, 2, 1)
-            output = model(X_batch)
-            probs = torch.sigmoid(output)
-            preds = (probs > SIGMOID_BINARY_CLASSIFICATION_THRESHOLD).float()
-
-            correct += (preds == y_batch).sum().item()
-            total += y_batch.size(0)
-
-            all_preds.append(preds.cpu())
-            all_targets.append(y_batch.cpu())
-
-    acc = correct / total
-    y_true = torch.cat(all_targets).numpy()
-    y_pred = torch.cat(all_preds).numpy()
-
-    precision = precision_score(y_true, y_pred)
-    recall = recall_score(y_true, y_pred)
-    f1 = f1_score(y_true, y_pred)
-
-    return acc, precision, recall, f1
-
-def objective(trial):
-    """
-    Objective function for Optuna hyperparameter optimization.
-
-    - Samples a set of hyperparameters from defined search spaces.
-    - Constructs and trains a CNN model with the suggested parameters.
-    - Evaluates model performance on the validation set.
-    - Saves the current trial's performance metrics and hyperparameters to a CSV file.
-    - Saves the model checkpoint if it achieves the best F1 score so far.
-
-    Args:
-        trial (optuna.trial.Trial): A trial object from Optuna used to suggest hyperparameters 
-                                    and store results.
-
-    Returns:
-        float: The F1 score on the validation set, used as the optimization objective.
-    """
-    global initial_completed
-
-    # Hyperparameters to explore
-    lr = trial.suggest_float("lr", OPTUNA_FALL_LR_MIN, OPTUNA_FALL_LR_MAX, log=True)
-    dropout = trial.suggest_float("dropout", OPTUNA_FALL_DROPOUT_MIN, OPTUNA_FALL_DROPOUT_MAX)
-    batch_size = trial.suggest_categorical("batch_size", OPTUNA_FALL_BATCH_SIZE_VALS)
-    num_channels = trial.suggest_categorical("num_channels", OPTUNA_FALL_NUM_CHANNELS_VALS)
-    layer_count = trial.suggest_int("layer_count", OPTUNA_FALL_LAYERS_MIN, OPTUNA_FALL_LAYERS_MAX)
-
-    # Calculate how many trials are left in this training run
-    trials_left = OPTUNA_FALL_N_TRIALS - (trial.number - initial_completed)
-
-    # Log current trial hyperparameter details
-    print('_____________________________________________________________')
-    print(f"\nTrial {trial.number}: Testing {layer_count}-layer CNN...")
-    print(f"Learning Rate: {lr}")
-    print(f"Batch Size: {batch_size}")
-    print(f"Number of Channels: {num_channels}")
-    print(f"Dropout: {dropout}")
-    print(f"{trials_left}/{OPTUNA_FALL_N_TRIALS} trials remaining...\n")
-
-    # Load data and train
-    train_loader, val_loader = load_data(X_PATH, Y_FALL_PATH, batch_size)
-    model = make_cnn(layer_count, num_channels, dropout)
-    val_loss, acc, precision, recall, f1, model_state = train_model(model, train_loader, val_loader, lr)
-
-    trial.set_user_attr("accuracy", acc)
-    trial.set_user_attr("precision", precision)
-    trial.set_user_attr("recall", recall)
-    trial.set_user_attr("val_loss", val_loss)
-
-    write_headers = not os.path.exists(OPTUNA_FALL_RESULTS_FILE_PATH)
-
-    with open(OPTUNA_FALL_RESULTS_FILE_PATH, mode="a", newline="") as file:
-        writer = csv.writer(file)
-        if write_headers:
-            writer.writerow([
-                "trial", "f1", "precision", "recall", "accuracy", "val_loss",
-                "learning_rate", "dropout", "batch_size", "num_channels", "layer_count"
-            ])
-        writer.writerow([
-            trial.number, f1, precision, recall, acc, val_loss,
-            lr, dropout, batch_size, num_channels, layer_count
-        ])
-
-    if model_state:
-        os.makedirs(FALL_MODEL_DIR_PATH, exist_ok=True)
-        torch.save(model_state, FALL_MODEL_DIR_PATH  / f"model-t{trial.number}-lc{layer_count}-f1{f1:.3f}.pt")
-
-        if f1 > objective.best_f1:
-            torch.save(model_state, BEST_FALL_MODEL_FILE_PATH)
-            objective.best_f1 = f1
-
-    return f1  # Maximizing F1 score
-
 def main():
     """
-    Runs Optuna hyperparameter optimization and evaluates the best CNN model.
-
-    - Creates or resumes an Optuna study to tune CNN architecture and training parameters.
-    - Trains and evaluates models across multiple trials, logging results.
-    - Saves metrics and model checkpoints for each trial.
-    - Loads and evaluates the best-performing model on the validation dataset.
-    - Saves final best model performance metrics to a CSV file.
+    Trains fall detection model using pre-tuned hyperparams, and evaluates model based on standard
+    performance metrics (F1, Accuracy, Precision, Recall)
 
     Returns:
         None
     """
-    global initial_completed
-
-    # === Testing Hyperparameter Combinations to Optimize Model Performance  ===
-    objective.best_f1 = 0.0 # Tracking best overall model
-
-    os.makedirs(METRICS_DIR_PATH, exist_ok=True)
-    os.makedirs(OPTUNA_STORAGE_DIR_PATH, exist_ok=True)
-    # if os.path.exists(OPTUNA_FALL_RESULTS_FILE_PATH): os.remove(OPTUNA_FALL_RESULTS_FILE_PATH)
-
-    study = optuna.create_study(
-                        study_name=OPTUNA_FALL_STUDY_NAME,
-                        direction="maximize",
-                        storage=OPTUNA_FALL_STORAGE_PATH,
-                        load_if_exists=True # Resume progress if exists
-                    )
-    initial_completed = len(study.trials)
-    study.optimize(objective, n_trials=OPTUNA_FALL_N_TRIALS)
-
-    print("Number of finished trials:", len(study.trials))
-    print("\nBest trial:")
-    print(study.best_trial)
-    print("Performance Metrics:")
-    print(study.best_trial.user_attrs)
-    print(f"Best F1 Score: {study.best_trial.value:.4f}")
-
-    # === Best Model Evaluation ===
-    print("\nEvaluating best model with best trial parameters...")
-
-    best_params = study.best_trial.params
-    best_model = make_cnn(
-        layer_count=best_params["layer_count"],
-        num_channels=best_params["num_channels"],
-        dropout=best_params["dropout"]
+    # === Training Model ===
+    if BEST_FALL_MODEL_HYPERPARAMS_FILE_PATH.exists():
+        # Load best hyperparams from CSV file 
+        fall_hyperparams = dict()
+        with open(BEST_FALL_MODEL_HYPERPARAMS_FILE_PATH, 'r') as csv_file:
+            dict_reader = csv.DictReader(csv_file)
+            fall_hyperparams = next(dict_reader, {})
+            fall_hyperparams = {
+                "layer_count": int(fall_hyperparams.get("layer_count", DEFAULT_LAYER_COUNT)),
+                "learning_rate": float(fall_hyperparams.get("learning_rate", DEFAULT_LEARNING_RATE)),
+                "batch_size": int(fall_hyperparams.get("batch_size", DEFAULT_BATCH_SIZE)),
+                "num_channels": int(fall_hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS)),
+                "dropout": float(fall_hyperparams.get("dropout", DEFAULT_DROPOUT)),
+            }
+        if not fall_hyperparams:
+            print("Error: CSV does not contain valid hyperparameter values.")
+            return
+    else:
+        print("Error: cannot reload best hyperparameters for fall detection model")
+        print("Unable to build CNN for evaluation without hyperparameters. Exiting script...")
+        return
+    lc = fall_hyperparams.get("layer_count")
+    lr = fall_hyperparams.get("learning_rate")
+    bs = fall_hyperparams.get("batch_size")
+    nc = fall_hyperparams.get("num_channels")
+    dr = fall_hyperparams.get("dropout")
+    
+    model = make_fall_detection_cnn(
+        layer_count=lc,
+        num_channels=nc,
+        dropout=dr
     )
-    best_model.load_state_dict(torch.load(BEST_FALL_MODEL_FILE_PATH))
+
+    print_color_text_with_timestamp(f"\nTraining {lc}-layer Fall CNN...", "PURPLE")
+    print(f"Learning Rate: {lr}")
+    print(f"Batch Size: {bs}")
+    print(f"Number of Channels: {nc}")
+    print(f"Dropout: {dr}")
+    print()
+    
+    # Load data and train
+    train_loader, val_loader = load_data(X_PATH, Y_FALL_PATH, bs)
+    # (metrics["val_loss"], metrics["acc"], metrics["precision"], metrics["recall"], metrics["f1"], best_model_state)
+    _, accuracy, precision, recall, f1, model_state = train_model(model, train_loader, val_loader, lr, epochs=NUM_EPOCHS, all_metrics=True)
+
+    if model_state:
+        os.makedirs(FALL_MODEL_DIR_PATH, exist_ok=True)
+        torch.save(model_state, FALL_MODEL_DIR_PATH  / f"model-lc{lc}-f1{f1:.3f}-acc{accuracy:.3f}.pt")
+
+    print_model_metrics(accuracy, precision, recall, f1, summary_title="Trained Fall Model Results")
+
+    # === Evaluating Model ===
+    print_color_text_with_timestamp("Evaluating trained fall detection model...", "PURPLE")
+
+    best_model = make_fall_detection_cnn(
+        layer_count=fall_hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
+        num_channels=fall_hyperparams.get("num_channels", DEFAULT_NUM_CHANNELS),
+        dropout=fall_hyperparams.get("dropout", DEFAULT_DROPOUT)
+    )
+    best_model.load_state_dict(torch.load(FALL_MODEL_DIR_PATH / f"model-lc{lc}-f1{f1:.3f}-acc{accuracy:.3f}.pt"))
+
 
     # Reload data with best batch size
-    _, val_loader = load_data(X_PATH, Y_FALL_PATH, best_params["batch_size"])
+    _, val_loader = load_data(X_PATH, Y_FALL_PATH, bs)
 
     # Re-evaluate on validation data
-    acc, precision, recall, f1 = evaluate_model(best_model, val_loader)
+    accuracy, precision, recall, f1 = evaluate_fall_detection_model(best_model, val_loader)
 
-    print("\nFinal Evaluation of Best Model:")
-    print(f"Accuracy: {acc:.4f}")
-    print(f"Precision: {precision:.4f}")
-    print(f"Recall: {recall:.4f}")
-    print(f"F1 Score: {f1:.4f}")
+    print_model_metrics(accuracy, precision, recall, f1, summary_title="Fall detection Model Evaluation")
 
-    with open(BEST_FALL_MODEL_HYPERPARAMS_FILE_PATH, "w", newline="") as csvFile:
-        csvWriter = csv.writer(csvFile)
-        csvWriter.writerow(["layer_count", "learning_rate", "batch_size", "num_channels", "dropout"])
-        csvWriter.writerow(
-            [best_params["layer_count"], 
-             best_params["lr"], 
-             best_params["batch_size"], 
-             best_params["num_channels"], 
-             best_params["dropout"]]
-            )
-
+    os.makedirs(FALL_METRICS_DIR_PATH, exist_ok=True)
+    print_with_timestamp(f"Saving best performance metrics...")
+    print_color_text(str(BEST_FALL_MODEL_METRICS_FILE_PATH), "BLUE")
     # Output FINAL best model performance metrics to CSV file
-    with open(BEST_FALL_MODEL_METRICS_FILE_PATH, "w", newline="") as csvFile:
-        csvWriter = csv.writer(csvFile)
+    with open(BEST_FALL_MODEL_METRICS_FILE_PATH, "w", newline="") as csv_file:
+        csvWriter = csv.writer(csv_file)
         csvWriter.writerow(["accuracy", "precision", "recall", "f1"])
-        csvWriter.writerow([acc, precision, recall, f1])
-
-    # TODO: Uncomment for running model without tuning hyperparameteres
-    # # Load Data
-    # train_loader, val_loader = load_data(X_PATH, Y_FALL_PATH, BATCH_SIZE)
-
-    # # Testing n-layer CNN
-    # print(f"\nTesting {LAYER_COUNT}-layer CNN...")
-    # print(f"Learning Rate: {LEARNING_RATE}")
-    # print(f"Batch Size: {BATCH_SIZE}")
-    # print(f"Number of Channels: {NUM_CHANNELS}")
-    # # print(f"Number of Epochs: {NUM_EPOCHS}")
-    # print(f"Dropout: {DROPOUT}")
-    # print()
-    # model = make_cnn(LAYER_COUNT, NUM_CHANNELS, DROPOUT)
-    # train_model(model, train_loader, val_loader, LEARNING_RATE)
-
-    # # Testing 3-layer CNN
-    # print("\nTesting 3-layer CNN...")
-    # model_3 = make_cnn(layer_count=3)
-    # train_model(model_3, train_loader, val_loader)
-
-    # # Testing 5-layer CNN
-    # print("\nTesting 5-layer CNN...")
-    # model_5 = make_cnn(layer_count=5)
-    # train_model(model_5, train_loader, val_loader)
-
-    # # Testing 7-layer CNN
-    # print("\nTesting 7-layer CNN...")
-    # model_7 = make_cnn(layer_count=7)
-    # train_model(model_7, train_loader, val_loader)
-
-    # # Testing 10-layer CNN
-    # print("\nTesting 10-layer CNN...")
-    # model_10 = make_cnn(layer_count=10)
-    # train_model(model_10, train_loader, val_loader)
+        csvWriter.writerow([accuracy, precision, recall, f1])
 
 if __name__ == "__main__":
     set_seed(RANDOM_SEED)

@@ -20,6 +20,7 @@ import csv
 import numpy as np
 from pathlib import Path
 
+from sklearn.base import accuracy_score
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset, random_split
@@ -377,11 +378,11 @@ def evaluate_fall_detection_model(model, val_loader):
 
             all_preds.append(preds.cpu())
             all_targets.append(y_batch.cpu())
+    
+    y_true = torch.cat(all_targets).view(-1).numpy()
+    y_pred = torch.cat(all_preds).view(-1).numpy()
 
-    acc = correct / total
-    y_true = torch.cat(all_targets).numpy()
-    y_pred = torch.cat(all_preds).numpy()
-
+    acc = accuracy_score(y_true, y_pred)
     precision = precision_score(y_true, y_pred)
     recall = recall_score(y_true, y_pred)
     f1 = f1_score(y_true, y_pred)
