@@ -178,7 +178,7 @@ def main():
         dropout=dr
     )
 
-    print_color_text_with_timestamp(f"\nTraining {lc}-layer Identity CNN...", "PURPLE")
+    print_color_text_with_timestamp(f"Training {lc}-layer Identity CNN...", "BRIGHT_MAGENTA")
     print(f"Learning Rate: {lr}")
     print(f"Batch Size: {bs}")
     print(f"Number of Channels: {nc}")
@@ -199,7 +199,7 @@ def main():
     print_model_metrics(accuracy, precision, recall, f1, summary_title="Trained Identity Model Results")
 
     # === Evaluating Model ===
-    print_color_text_with_timestamp("Evaluating trained identity inference model...", "PURPLE")
+    print_color_text("Evaluating trained identity inference model...", "PURPLE")
 
     best_model = make_identity_inference_cnn(
         layer_count=identity_hyperparams.get("layer_count", DEFAULT_LAYER_COUNT),
