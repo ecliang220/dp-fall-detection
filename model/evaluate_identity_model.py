@@ -14,10 +14,16 @@ from util.util import print_with_timestamp, print_color_text
 def main():
     print_with_timestamp("\nEvaluating best model with best trial parameters...")
 
-    if BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH.exists():
+    # TODO: (TEMPORARY) Replace BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH with `all_time_best_identity_model_hyperparams.csv`
+    # To test new sliced dual-label windows against best model hyperparams tuned on single label windows
+    if os.path.exists(os.path.dirname(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH) / "all_time_best_identity_model_hyperparams.csv"):
+    # if BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH.exists():
         # Load best hyperparams from CSV file 
         identity_hyperparams = dict()
-        with open(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH, 'r') as csv_file:
+        # TODO: (TEMPORARY) Replace BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH with `all_time_best_identity_model_hyperparams.csv`
+        # To test new sliced dual-label windows against best model hyperparams tuned on single label windows
+        with open(os.path.dirname(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH) / "all_time_best_identity_model_hyperparams.csv", 'r') as csv_file:
+        # with open(BEST_IDENTITY_MODEL_HYPERPARAMS_FILE_PATH, 'r') as csv_file:
             dict_reader = csv.DictReader(csv_file)
             identity_hyperparams = next(dict_reader, {})
             identity_hyperparams = {
@@ -45,7 +51,11 @@ def main():
         num_channels=identity_hyperparams["num_channels"],
         dropout=identity_hyperparams["dropout"]
     )
-    best_model.load_state_dict(torch.load(BEST_IDENTITY_MODEL_FILE_PATH, weights_only=True))
+
+    # TODO: (TEMPORARY) Replace BEST_IDENTITY_MODEL_FILE_PATH with `all-time-best-model-t24-lc5-f10.930.pt`
+    # To test new sliced dual-label windows against best model weights trained from single label windows
+    best_model.load_state_dict(torch.load(os.path.dirname(BEST_IDENTITY_MODEL_FILE_PATH) / "all-time-best-model-t24-lc5-f10.930.pt", weights_only=True))
+    # best_model.load_state_dict(torch.load(BEST_IDENTITY_MODEL_FILE_PATH, weights_only=True))
 
     # Reload data with best batch size
     _, val_loader = load_data(X_PATH, Y_IDENTITY_PATH, identity_hyperparams["batch_size"])
