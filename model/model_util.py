@@ -20,12 +20,11 @@ import csv
 import numpy as np
 from pathlib import Path
 
-from sklearn.base import accuracy_score
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
-from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from sklearn.preprocessing import StandardScaler
 
 from util.util import print_color_text, print_color_text_with_timestamp
