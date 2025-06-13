@@ -48,6 +48,16 @@ PROJECT_ROOT = COLAB_ROOT if IS_COLAB else LOCAL_ROOT
 NUM_ADULTS = 23
 # Number of Elder participants
 NUM_ELDERS = 15
+# Number of sensors used
+NUM_SENSORS = 3
+# Number of axes measured by sensors
+NUM_AXES = 3
+
+SENSOR_RANGE_IDX = {
+    "ADXL345": (0, 3),
+    "ITG3200": (3, 6),
+    "MMA8451Q": (6, 9)
+}
 
 # Fixed-length sliding window parameters
 WINDOW_SIZE = 200           # 200 rows = 1 second at 200 Hz

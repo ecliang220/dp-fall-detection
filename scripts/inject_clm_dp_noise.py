@@ -27,7 +27,6 @@ from tqdm import tqdm
 # Add project root to sys.path so `util` functions can be found
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from util.util import print_with_timestamp, print_color_text_with_timestamp, print_color_text, bold_text, get_timestamp_now
-from model.model_util import set_seed
 
 # --------------------------------------------------------------------
 # Directory and File Paths
@@ -37,19 +36,21 @@ from model.model_util import (
     WINDOWS_DIR_PATH, WINDOWS_FILE_NAME, 
     FALL_LABELS_FILE_NAME, IDENTITY_LABELS_FILE_NAME, 
     LOG_FILE_PATH,
-    CLM_DP_Experiment # CLM-DP Experiment Constants
+    WINDOW_SIZE, NUM_AXES, NUM_SENSORS, SENSOR_RANGE_IDX,
+    CLM_DP_Experiment, # CLM-DP Experiment Constants
+    set_seed
     )
 
 # Boolean value indicating whether to skip or overwrite existing files for reruns of epsilon values
 SKIP_EXISTING = False
 
-def flatten_windows_to_1d(X_windows):
+def flatten_windows_to_2d(X_windows):
     """
-    Flattens each 2D sensor window into a 1D vector.
+    Flattens each 3D batch of sensor windows into a 2D array.
 
     Args:
         X_windows (np.ndarray): A 3D NumPy array of shape (num_windows, time_steps, num_features),
-                                typically representing fixed-length IMU data windows.
+                                representing fixed-length IMU data windows.
 
     Returns:
         np.ndarray: A 2D array of shape (num_windows, time_steps × num_features), where each row
@@ -94,7 +95,7 @@ def inject_noise_into_windows(windows, epsilon, L):
     Returns:
         np.ndarray: Noised IMU windows of shape (n, 1800).
     """
-    X_flat = flatten_windows_to_1d(windows)  # shape: (num_windows, 1800)
+    X_flat = flatten_windows_to_2d(windows)  # shape: (num_windows, time_steps x features)
 
     X_noised = np.zeros_like(X_flat)
 
@@ -107,12 +108,12 @@ def inject_noise_into_windows(windows, epsilon, L):
     
     return X_noised
 
-def precompute_cholesky_decomp(size):
+def precompute_window_cholesky_decomp(size):
     """
     Constructs and decomposes the exponential decay covariance matrix.
 
     Args:
-        size (int): Dimensionality of the flattened window (e.g., 1800).
+        size (int): Dimensionality of the flattened window.
 
     Returns:
         np.ndarray: Lower triangular matrix from Cholesky decomposition.
@@ -122,6 +123,42 @@ def precompute_cholesky_decomp(size):
     corr_matrix = np.power(CLM_DP_Experiment.DECAY_FACTOR, np.abs(indices[:, None] - indices[None, :]))
 
     return np.linalg.cholesky(corr_matrix + CLM_DP_Experiment.JITTER_EPS * np.eye(size))
+
+def precompute_sensor_cholesky_decomp(num_timesteps, num_axes):
+    """
+    Constructs and decomposes the exponential decay covariance matrix.
+
+    Args:
+        num_timesteps (int): Number of timesteps collected by sensor in a window.
+        num_axes (int): Number of axes measured by sensor
+
+    Returns:
+        np.ndarray: Lower triangular matrix from Cholesky decomposition.
+    """
+    # Precompute Cholesky decomposition of exponential decay covariance matrix
+    indices = np.arange(num_timesteps * num_axes)
+    corr_matrix = np.power(CLM_DP_Experiment.DECAY_FACTOR, np.abs(indices[:, None] - indices[None, :]))
+
+    return np.linalg.cholesky(corr_matrix + CLM_DP_Experiment.JITTER_EPS * np.eye(num_timesteps * num_axes))
+
+def inject_noise_into_windows_per_sensor(windows, epsilon, window_size=WINDOW_SIZE, num_axes=NUM_AXES):
+    sensor_L = precompute_sensor_cholesky_decomp(window_size, num_axes)
+
+    noised_windows = []
+
+    for window in tqdm(windows, desc="Injecting noise", unit="window"):
+        noised_window = window.copy()
+        for (sensor_start_idx, sensor_end_idx) in SENSOR_RANGE_IDX.values():
+            sensor_data = window[:, sensor_start_idx:sensor_end_idx]
+            flat_sensor_data = sensor_data.reshape(-1) # shape = (NUM_TIMESTEPS x NUM_AXES,)
+            noised_flat_sensor_data = flat_sensor_data + sample_correlated_laplace_noise(sensor_L, epsilon)
+            noised_sensor_data = noised_flat_sensor_data.reshape(window_size, num_axes)
+
+            noised_window[:, sensor_start_idx:sensor_end_idx] = noised_sensor_data
+
+        noised_windows.append(noised_window)
+    
+    return np.stack(noised_windows)            
 
 def append_to_log(log_path, epsilon, decay_factor, jitter_eps, X_shape, output_dir):
     """
@@ -167,10 +204,8 @@ def main():
 
     Steps:
         1. Load preprocessed IMU windows and labels from .npy files.
-        2. Flatten each window to a 1D vector.
-        3. Inject CLM noise into each vectorized window using the Gaussian trick.
-        4. Reshape noised data back to 3D (num_windows, time_steps, num_features).
-        5. Save the noised data and corresponding labels to a directory named for the ε value.
+        2. Inject CLM-DP noise into each sensor segment of each window.
+        3. Save the noised data and corresponding labels to a directory named for the ε value.
 
     Output:
         Saves noised windows and unchanged labels in a subdirectory of `data/windows`:
@@ -187,7 +222,7 @@ def main():
 
     print_with_timestamp(f"Loaded {X.shape[0]} windows of shape {X.shape[1:]}.")
 
-    for epsilon in CLM_DP_Experiment.EPSILON_VALS:
+    for epsilon in sorted(CLM_DP_Experiment.EPSILON_VALS):
         clm_dp_output_dir_path = WINDOWS_DIR_PATH / f"clm_dp_eps_{epsilon}"
         windows_file_path = clm_dp_output_dir_path / WINDOWS_FILE_NAME
         fall_labels_file_path = clm_dp_output_dir_path / FALL_LABELS_FILE_NAME
@@ -196,9 +231,12 @@ def main():
         if SKIP_EXISTING and all(path.exists() for path in [clm_dp_output_dir_path, windows_file_path, fall_labels_file_path, identity_labels_file_path]):
             print_color_text_with_timestamp(f"⚠️Skipping {bold_text(f'ε = {epsilon}')}: files already exist at {clm_dp_output_dir_path}", "YELLOW")
             continue
+        
+        # Alternative: To test uniform CLM-DP noise injection across entire window
+        # L = precompute_cholesky_decomp_uniform(X.shape[1] * X.shape[2])
+        # X_noised = inject_noise_into_windows(X, epsilon, L)
 
-        L = precompute_cholesky_decomp(X.shape[1] * X.shape[2])
-        X_noised = inject_noise_into_windows(X, epsilon, L)
+        X_noised = inject_noise_into_windows_per_sensor(X, epsilon, WINDOW_SIZE, NUM_AXES)
 
         os.makedirs(clm_dp_output_dir_path, exist_ok=True)
         X_noised_reshaped = X_noised.reshape(X.shape)  # Reshape back to (num_windows, 200, 9)
